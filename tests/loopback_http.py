@@ -56,10 +56,55 @@ def case(name, response, expected_success):
     print("PASS_LOOPBACK %s expected_success=%s" % (name, expected_success))
 
 
+def redirect_same_origin():
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(2)
+    srv.settimeout(6)
+    port = srv.getsockname()[1]
+    problems = []
+
+    def serve():
+        try:
+            for i, expected in enumerate(("/probe", "/redirected?ok=1")):
+                conn, _ = srv.accept()
+                with conn:
+                    conn.settimeout(4)
+                    request = bytearray()
+                    while b"\r\n\r\n" not in request and len(request)<2048:
+                        data=conn.recv(2048)
+                        if not data:break
+                        request.extend(data)
+                    if not request.startswith(("GET "+expected+" HTTP/1.1\r\n").encode()):
+                        problems.append("unexpected redirect path %d: %r" % (i,request[:80]))
+                    if i==0:
+                        conn.sendall(b"HTTP/1.1 302 Found\r\nLocation: /redirected?ok=1\r\nContent-Length: 0\r\n\r\n")
+                    else:
+                        conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nOK-LOCAL!")
+        except Exception as exc:
+            problems.append(str(exc))
+        finally:
+            srv.close()
+
+    t=threading.Thread(target=serve,daemon=True)
+    t.start()
+    try:
+        p=subprocess.run([BIN,"http://127.0.0.1:%d/probe" % port],
+                         capture_output=True,timeout=12,check=False)
+    finally:
+        t.join(timeout=6)
+    out=(p.stdout+p.stderr).decode(errors="replace")
+    if problems or t.is_alive() or "[OK] Fetch completo" not in out or "[REDIRECT]" not in out:
+        raise AssertionError("redirect_same_origin: problems=%r output=%s" %(problems,out[-1600:]))
+    print("PASS_LOOPBACK same-origin 302 redirect with 2 real requests")
+
 case("content_length", b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\nConnection: close\r\n\r\nOK-LOCAL!", True)
 case("chunked", b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n", True)
 case("duplicate_length", b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\ncontent-length: 9\r\n\r\nBAD", False)
 case("unsupported_encoding", b"HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip\r\n\r\nBAD", False)
 case("duplicate_encoding", b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\ntransfer-encoding: chunked\r\n\r\n0\r\n\r\n", False)
 case("http_404", b"HTTP/1.1 404 Not Found\r\nContent-Length: 3\r\n\r\nBAD", False)
-print("PASS_SCOPED 6 real ELF loopback HTTP sessions; no external DNS or internet")
+case("cross_origin_redirect", b"HTTP/1.1 302 Found\r\nLocation: //example.org/\r\nContent-Length: 0\r\n\r\n", False)
+redirect_same_origin()
+print("PASS_SCOPED 8 real ELF loopback HTTP sessions; no external DNS or internet")
