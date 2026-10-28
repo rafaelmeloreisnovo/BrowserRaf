@@ -10,43 +10,55 @@
 #include "br_tls.h"
 
 /* ── BUILDER DE REQUEST HTTP ────────────────────────────────────────────── */
-static u32 HTTP_BUILD_REQ(const char*host,const char*path,u8*buf,u32 cap){
-    /* Bounded input; reject before writing to buf. */
-    if(!host||!path||!buf)return 0u;
+static u32 HTTP_BUILD_REQ_PORT(const char*host,const char*path,u32 port,u8*buf,u32 cap){
+    /* Host names restricted to DNS/IPv4 ASCII. URL_PARSE rejects unsupported
+     * IPv6 authorities, controls and userinfo. Local nondefault ports MUST be
+     * reflected in Host for HTTP/1.1 virtual hosting. */
+    if(!host||!path||!buf||port==0u||port>65535u)return 0u;
     u32 hlen=0u,plen=0u;
     while(hlen<254u&&host[hlen])hlen++;
     while(plen<512u&&path[plen])plen++;
     if(!hlen||hlen>253u||!plen||plen>=512u||path[0]!='/')return 0u;
     for(u32 i=0u;i<hlen;i++){
         u8 c=(u8)host[i];
-        if(c<=0x20u||c>=0x7Fu)return 0u;
+        if(!((c>='a'&&c<='z')||(c>='A'&&c<='Z')||
+            (c>='0'&&c<='9')||c=='-'||c=='.'))return 0u;
     }
     for(u32 i=0u;i<plen;i++){
         u8 c=(u8)path[i];
-        if(c<=0x20u||c==0x7Fu)return 0u;
+        if(c<=0x20u||c>=0x7Fu||c=='#'||c=='\\')return 0u;
     }
-    /* Literal payload 194 bytes; each variable field checked above. */
-    if(cap<194u+hlen+plen)return 0u;
+    u32 digits=0u;
+    if(port!=80u){
+        u32 v=port; do{digits++;v/=10u;}while(v);
+        digits++; /* colon */
+    }
+    /* The constant portion is 194 bytes, verified from the wire literals. */
+    if(cap<194u+hlen+plen+digits)return 0u;
     u8*p=buf;
-    /* GET {path} HTTP/1.1\r\n */
-    MC(p,(const u8*)"GET ",4u);p+=4;
-    MC(p,(const u8*)path,plen);p+=plen;
-    MC(p,(const u8*)" HTTP/1.1\r\n",11u);p+=11;
-    /* Host: {host}\r\n */
-    MC(p,(const u8*)"Host: ",6u);p+=6;
-    MC(p,(const u8*)host,hlen);p+=hlen;
-    MC(p,(const u8*)"\r\n",2u);p+=2;
-    /* Connection: close\r\n */
-    MC(p,(const u8*)"Connection: close\r\n",19u);p+=19;
-    /* User-Agent: RAFAELIA-Browser/1.0\r\n */
-    MC(p,(const u8*)"User-Agent: RAFAELIA-Browser/1.0 (ARM; freestanding; nolibc)\r\n",62u);p+=62;
-    /* Accept: text/html,text/plain\r\n */
-    MC(p,(const u8*)"Accept: text/html,text/plain;q=0.9,*/*;q=0.8\r\n",46u);p+=46;
-    /* Accept-Language: pt-BR,pt;q=0.9,en;q=0.8\r\n */
-    MC(p,(const u8*)"Accept-Language: pt-BR,pt;q=0.9,en;q=0.8\r\n",42u);p+=42;
-    /* \r\n final */
-    MC(p,(const u8*)"\r\n",2u);p+=2;
+#define BR_APP(s) do{const char*txt=(s);u32 nn=(u32)(sizeof(s)-1u);MC(p,txt,nn);p+=nn;}while(0)
+    BR_APP("GET ");
+    MC(p,path,plen);p+=plen;
+    BR_APP(" HTTP/1.1\r\n");
+    BR_APP("Host: ");
+    MC(p,host,hlen);p+=hlen;
+    if(port!=80u){
+        *p++=':';
+        char dec[5];u32 n=0u,v=port;
+        do{dec[n++]=(char)('0'+(v%10u));v/=10u;}while(v);
+        while(n)*p++=(u8)dec[--n];
+    }
+    BR_APP("\r\n");
+    BR_APP("Connection: close\r\n");
+    BR_APP("User-Agent: RAFAELIA-Browser/1.0 (ARM; freestanding; nolibc)\r\n");
+    BR_APP("Accept: text/html,text/plain;q=0.9,*/*;q=0.8\r\n");
+    BR_APP("Accept-Language: pt-BR,pt;q=0.9,en;q=0.8\r\n");
+    BR_APP("\r\n");
+#undef BR_APP
     return(u32)(p-buf);
+}
+static u32 HTTP_BUILD_REQ(const char*host,const char*path,u8*buf,u32 cap){
+    return HTTP_BUILD_REQ_PORT(host,path,80u,buf,cap);
 }
 
 /* ── PARSE DE STATUS LINE ───────────────────────────────────────────────── */
