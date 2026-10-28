@@ -63,8 +63,8 @@ static u32 HTTP_PARSE_STATUS(const u8*buf,u32 n){
         code=code*10u+(u32)(buf[j]-'0');
     }
     if(code<100u||code>599u)return 0u;
-    if(buf[12]=='\\r'){
-        if(buf[13]!='\\n')return 0u;
+    if(buf[12]=='\r'){
+        if(buf[13]!='\n')return 0u;
     }else if(buf[12]!=' '){
         return 0u;
     }
@@ -118,7 +118,7 @@ static s32 HTTP_CONTENT_LENGTH(const u8*buf,u32 n,u32*out){
      * Reject the entire response, instead of trusting the first header. */
     u32 occurrences=0u;
     for(u32 i=0u;i+15u<hend;i++){
-        u32 bol=(i==0u)||((i>=2u)&&buf[i-2u]=='\\r'&&buf[i-1u]=='\\n');
+        u32 bol=(i==0u)||((i>=2u)&&buf[i-2u]=='\r'&&buf[i-1u]=='\n');
         if(bol&&BR_MEMCASECMP_ASCII(buf+i,"Content-Length",14u)==0&&buf[i+14u]==':'){
             if(++occurrences>1u)return-1;
         }
