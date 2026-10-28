@@ -71,7 +71,7 @@ static void WR_SAFE(u32 fd,const void*b,u32 n){
 
 
 /* ── FETCH HTTP ─────────────────────────────────────────────────────────── */
-static s32 DO_FETCH(BCtx*ctx){
+static s32 DO_FETCH_R(BCtx*ctx,u32 redirects){
     ctx->flags=FL_IDLE;
     ctx->fd=-1; /* no owned socket until SOCKET succeeds; never close fd 0 */
     u64 t0=NS();
@@ -221,11 +221,44 @@ static s32 DO_FETCH(BCtx*ctx){
         goto done;
     }
     PS("  Status HTTP: ");PN(ctx->status);
-    /* This renderer supports 2xx response bodies only. Do not report a
-     * 301/404/500 as successful navigation; redirect support is gated. */
+    /* Same-origin, path-absolute redirects only; at most four hops. Unknown
+     * schemes, cross-origin, scheme-relative and relative-location redirects
+     * fail closed until their separate origin policy is implemented. */
+    if(ctx->status==301u||ctx->status==302u||ctx->status==303u||
+       ctx->status==307u||ctx->status==308u){
+        u32 hend=HTTP_HEADERS_END(_NB,total);
+        if(redirects>=4u||!hend||HTTP_TRANSFER_ENCODING(_NB,hend)<0){
+            FF_SET(ctx->flags,FL_ERROR);
+            STATUS(ctx->flags,"Redirecionamento inseguro, malformado ou excessivo");
+            goto done;
+        }
+        u32 cl_tmp=0u;
+        if(HTTP_CONTENT_LENGTH(_NB,total,&cl_tmp)<0)goto done;
+        const u8*loc=HTTP_FIND_HEADER(_NB,total,"Location");
+        if(!loc){
+            FF_SET(ctx->flags,FL_ERROR);
+            STATUS(ctx->flags,"Redirecionamento sem Location");
+            goto done;
+        }
+        u32 off=(u32)(loc-_NB),len=0u;
+        /* Only a single origin-relative absolute path. Reject //host. */
+        if(off>=hend||loc[0]!='/'||loc[1]=='/')goto done;
+        while(off+len<hend&&loc[len]!='\r'&&loc[len]!='#'){
+            u8 c=loc[len];
+            if(c<0x21u||c>=0x7Fu||c=='\\'||len>=511u)goto done;
+            len++;
+        }
+        if(len==0u||off+len>=hend)goto done;
+        ctx->path[0]=0u;
+        MC(ctx->path,loc,len);
+        ctx->path[len]=0;
+        PS("  [REDIRECT] mesmo host, caminho: ");PS(ctx->path);PS("\n");
+        rc=DO_FETCH_R(ctx,redirects+1u);
+        goto done;
+    }
     if(ctx->status<200u||ctx->status>=300u){
         FF_SET(ctx->flags,FL_ERROR);
-        STATUS(ctx->flags,"HTTP status exige tratamento não implementado");
+        STATUS(ctx->flags,"HTTP status não navegável");
         goto done;
     }
 
@@ -311,6 +344,8 @@ done:
     ctx->t_ns=NS()-t0;
     return rc;
 }
+
+static s32 DO_FETCH(BCtx*ctx){return DO_FETCH_R(ctx,0u);}
 
 /* ── ENTRY POINT ─────────────────────────────────────────────────────────── */
 /* URLs de teste — passados via argvX no _start como posição fixa da stack */
