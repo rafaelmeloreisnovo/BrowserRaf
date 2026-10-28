@@ -9,55 +9,62 @@
 
 /* Parse de URL → preenche BCtx */
 static s32 URL_PARSE(const char*url,BCtx*ctx){
-    /* Host/path storage is bounded. Invalid URLs must not be truncated into
-     * a DIFFERENT destination: this includes embedded controls and overflow. */
+    /* Explicit supported schemes; never silently reinterpret ftp://, spaces,
+     * fragments or truncated hostnames as different network destinations. */
     if(!url||!ctx)return-1;
-    u32 input_len=SL(url);
-    if(input_len==0u)return-1;
+    u32 n=0u;
+    while(n<768u&&url[n])n++;
+    if(!n||n==768u)return-1;
     MC0(ctx->host,256u);MC0(ctx->path,512u);
-    ctx->port=80u;ctx->use_tls=0;
+    ctx->port=80u;ctx->use_tls=0u;
     const char*p=url;
-    if(input_len>=8u&&BR_MEMCMP(p,"https://",8u)==0){
-        ctx->use_tls=1;ctx->port=443u;p+=8;
-    }else if(input_len>=7u&&BR_MEMCMP(p,"http://",7u)==0){
+    if(n>=8u&&BR_MEMCMP(p,"https://",8u)==0){
+        ctx->use_tls=1u;ctx->port=443u;p+=8;
+    }else if(n>=7u&&BR_MEMCMP(p,"http://",7u)==0){
         p+=7;
-    }else if(input_len>=2u&&BR_MEMCMP(p,"//",2u)==0){
+    }else if(n>=2u&&BR_MEMCMP(p,"//",2u)==0){
         p+=2;
+    }else{
+        /* Bare host is accepted; unknown schemes and authority delimiters are not. */
+        for(u32 i=0u;i<n;i++){
+            if(url[i]==':'||url[i]=='\\')return-1;
+            if(i+2u<n&&url[i]=='/'&&url[i+1u]=='/')return-1;
+            if(url[i]=='/'||url[i]=='?'||url[i]=='#')break;
+        }
     }
     u32 hi=0u;
-    while(*p&&*p!='/'&&*p!=':'){
+    while(*p&&*p!='/'&&*p!=':'&&*p!='?'&&*p!='#'){
         u8 c=(u8)*p;
-        if(hi>=255u||c<=0x20u||c>=0x7Fu||
-           c=='@'||c=='?'||c=='#'||c=='\\')return-1;
-        ctx->host[hi++]=(char)c;
-        p++;
+        u8 valid=(u8)((c>='a'&&c<='z')||(c>='A'&&c<='Z')||
+            (c>='0'&&c<='9')||c=='-'||c=='.');
+        if(!valid||hi>=253u)return-1;
+        ctx->host[hi++]=(char)c;p++;
+    }
+    if(!hi||ctx->host[0]=='.'||ctx->host[hi-1u]=='.')return-1;
+    for(u32 j=1u;j<hi;j++){
+        if(ctx->host[j]=='.'&&ctx->host[j-1u]=='.')return-1;
     }
     ctx->host[hi]=0;
-    if(!hi)return-1;
     if(*p==':'){
         u32 port=0u,digits=0u;
         p++;
         while(*p>='0'&&*p<='9'){
-            u32 digit=(u32)(*p-'0');
-            if(port>6553u||(port==6553u&&digit>5u))return-1;
-            port=port*10u+digit;
-            digits++;
-            p++;
+            u32 v=(u32)(*p-'0');
+            if(digits>=5u||port>6553u||(port==6553u&&v>5u))return-1;
+            port=port*10u+v;digits++;p++;
         }
-        if(!digits||!port||(*p&&*p!='/'))return-1;
+        if(!digits||!port||(*p&&*p!='/'&&*p!='?'&&*p!='#'))return-1;
         ctx->port=port;
     }
-    if(*p=='/'){
-        u32 pi=0u;
-        while(*p){
-            u8 c=(u8)*p;
-            if(pi>=511u||c<0x20u||c==0x7Fu)return-1;
-            ctx->path[pi++]=(char)c;
-            p++;
-        }
-        ctx->path[pi]=0;
-    }else if(*p)return-1;
-    else{ctx->path[0]='/';ctx->path[1]=0;}
+    u32 pi=0u;
+    if(*p!='/')ctx->path[pi++]='/';
+    while(*p&&*p!='#'){
+        u8 c=(u8)*p++;
+        if(c<0x21u||c>=0x7Fu||c=='\\'||pi>=511u)return-1;
+        ctx->path[pi++]=(char)c;
+    }
+    if(!pi)ctx->path[pi++]='/';
+    ctx->path[pi]=0;
     return 0;
 }
 
