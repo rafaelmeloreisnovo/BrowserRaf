@@ -11,6 +11,7 @@
 #include "br_http.h"
 #include "br_html.h"
 #include "br_dns.h"
+#include "br_links.h"
 #ifndef AT_FDCWD
 #define AT_FDCWD (-100)
 #endif
@@ -74,6 +75,7 @@ static void WR_SAFE(u32 fd,const void*b,u32 n){
 static s32 DO_FETCH_R(BCtx*ctx,u32 redirects){
     ctx->flags=FL_IDLE;
     ctx->fd=-1; /* no owned socket until SOCKET succeeds; never close fd 0 */
+    _BR_LINK_COUNT=0u;
     u64 t0=NS();
     s32 rc=-1;
 
@@ -315,6 +317,7 @@ static s32 DO_FETCH_R(BCtx*ctx,u32 redirects){
 
     u32 rlen=0u;
     if(ctx->status!=0)rlen=HTML_RENDER(_NB+body_off,body_len,_RB,NET_BUF);
+    u32 link_count=BR_LINK_SCAN(_NB+body_off,body_len);
     if(!BR_PHASE_NEXT(&ctx->flags,FL_HTML_RND,FL_DONE,FL_HTML_RND)){
         STATUS(ctx->flags,"Estado invalido: HTML_RND->DONE");
         goto done;
@@ -325,6 +328,13 @@ static s32 DO_FETCH_R(BCtx*ctx,u32 redirects){
     PS("\033[1;32m");PS(ctx->host);PS(ctx->path);PS("\033[0m\n");
     HEADER_LINE();
     WR(1,_RB,rlen);
+    if(link_count){
+        PS("\nLinks disponíveis (use --interactive para navegar):\n");
+        for(u32 k=0u;k<link_count;k++){
+            char number[12];UTOA(k+1u,number);
+            PS("  [");PS(number);PS("] ");PS(_BR_LINKS[k].href);PS("\n");
+        }
+    }
     HEADER_LINE();
 
     rc=0;
@@ -381,8 +391,15 @@ void browser_main(void){
     if(cfd>=0){_sc3(0u,(u64)cfd,(u64)(usize)_CMD,511u);_sc1(3u,(u64)cfd);}
 #endif
     /* Pula arg0 (programa), pega arg1 se existe */
+    u8 interactive=0u;
     {u32 ci=0;while(ci<511u&&_CMD[ci])ci++;ci++;
-     if(ci<511u&&_CMD[ci]){url=(const char*)(_CMD+ci);}}
+     if(ci<511u&&_CMD[ci]){
+         url=(const char*)(_CMD+ci);
+         while(ci<511u&&_CMD[ci])ci++;
+         ci++;
+         if(ci<511u&&SL((const char*)(_CMD+ci))==13u&&
+            BR_MEMCMP(_CMD+ci,"--interactive",13u)==0)interactive=1u;
+     }}
 
     PS("\033[1;37mURL: \033[0;36m");PS(url);PS("\033[0m\n\n");
 
@@ -421,6 +438,52 @@ void browser_main(void){
         PS("    rx=");PN(_BC.rx_bytes);
         PS("    t_ms=");PN(BR_DIV_U64_U32(_BC.t_ns,1000000u));PS("\n");
         PS("    flags finais=");PH(_BC.flags);
+    }
+
+    if(interactive){
+        /* Opt-in, bounded, terminal-only navigation; no implicit remote
+         * navigation or credential submission. "b" re-fetches prior page. */
+        static BCtx history[8];
+        u32 history_count=0u;
+        for(u32 turn=0u;turn<128u;turn++){
+            PS("\nBrowserRaf [1..24 link | b voltar | q sair] > ");
+            char input[32];MC0(input,sizeof(input));
+            s32 bytes=BR_READ(0u,input,sizeof(input)-1u);
+            if(bytes<=0)break;
+            if(input[0]=='q'||input[0]=='Q')break;
+            if(input[0]=='b'||input[0]=='B'){
+                if(history_count){
+                    history_count--;
+                    MC(&_BC,&history[history_count],sizeof(_BC));
+                    (void)DO_FETCH(&_BC);
+                }else PS("Histórico vazio\n");
+                continue;
+            }
+            u32 chosen=0u,good=0u;
+            for(s32 k=0;k<bytes;k++){
+                u8 c=(u8)input[k];
+                if(c=='\n'||c=='\r')break;
+                if(c<'0'||c>'9'){good=0u;break;}
+                chosen=chosen*10u+(u32)(c-'0');
+                if(chosen>BR_MAX_LINKS){good=0u;break;}
+                good=1u;
+            }
+            if(!good||chosen==0u||chosen>_BR_LINK_COUNT){
+                PS("Seleção inválida ou link indisponível\n");continue;
+            }
+            BCtx next;
+            MC(&next,&_BC,sizeof(_BC));
+            if(BR_LINK_FOLLOW(&next,chosen)!=0){
+                PS("Link inválido ou protocolo não suportado\n");continue;
+            }
+            if(history_count==8u){
+                for(u32 k=1u;k<8u;k++)MC(&history[k-1u],&history[k],sizeof(BCtx));
+                history_count=7u;
+            }
+            MC(&history[history_count++],&_BC,sizeof(_BC));
+            MC(&_BC,&next,sizeof(_BC));
+            (void)DO_FETCH(&_BC);
+        }
     }
 
     EX();
