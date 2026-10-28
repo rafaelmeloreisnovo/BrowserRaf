@@ -5,6 +5,7 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 
 BIN = sys.argv[1]
 
@@ -141,6 +142,37 @@ def interactive_navigation():
         raise AssertionError("interactive_navigation failed %r %s" % (problems,out[-1800:]))
     print("PASS_LOOPBACK interactive HTML link selection with encoded ampersand")
 
+def content_length_without_eof():
+    srv=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+    srv.bind(("127.0.0.1",0));srv.listen(1);srv.settimeout(5)
+    port=srv.getsockname()[1]
+    problems=[]
+    def serve():
+        try:
+            conn,_=srv.accept()
+            with conn:
+                conn.settimeout(5)
+                while True:
+                    data=conn.recv(2048)
+                    if not data or b"\r\n\r\n" in data:break
+                conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nOK-LOCAL!")
+                time.sleep(3.5)  # Peer intentionally withholds EOF after full body.
+        except Exception as exc:problems.append(str(exc))
+        finally:srv.close()
+    t=threading.Thread(target=serve,daemon=True);t.start()
+    try:
+        start=time.monotonic()
+        p=subprocess.run([BIN,"http://127.0.0.1:%d/probe"%port],
+                         capture_output=True,timeout=7,check=False)
+        elapsed=time.monotonic()-start
+    finally:t.join(timeout=6)
+    out=(p.stdout+p.stderr).decode(errors="replace")
+    if problems or t.is_alive() or "[OK] Fetch completo" not in out or elapsed>=2.5:
+        raise AssertionError("Content-Length response waited for EOF: elapsed %.2fs %s"%
+                             (elapsed,out[-900:]))
+    print("PASS_LOOPBACK Content-Length completes before peer EOF (%.2fs)"%elapsed)
+
 case("content_length", b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\nConnection: close\r\n\r\nOK-LOCAL!", True)
 case("chunked", b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n", True)
 case("duplicate_length", b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\ncontent-length: 9\r\n\r\nBAD", False)
@@ -150,4 +182,5 @@ case("http_404", b"HTTP/1.1 404 Not Found\r\nContent-Length: 3\r\n\r\nBAD", Fals
 case("cross_origin_redirect", b"HTTP/1.1 302 Found\r\nLocation: //example.org/\r\nContent-Length: 0\r\n\r\n", False)
 redirect_same_origin()
 interactive_navigation()
-print("PASS_SCOPED 10 real ELF loopback HTTP sessions; no external DNS or internet")
+content_length_without_eof()
+print("PASS_SCOPED 11 real ELF loopback HTTP sessions; no external DNS or internet")
