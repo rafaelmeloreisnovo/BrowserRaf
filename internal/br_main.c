@@ -16,6 +16,23 @@
 #endif
 
 
+/* ARMv7 has no native 64-bit unsigned divide instruction; using the usual
+ * C '/' on u64 would import __aeabi_uldivmod from a runtime library.
+ * This bounded, fixed-iteration unsigned long division requires no CRT.
+ * d is nonzero at all callers and checked defensively. */
+static u64 BR_DIV_U64_U32(u64 n,u32 d){
+    if(d==0u)return 0u;
+    u64 q=0u,r=0u;
+    for(u32 i=64u;i!=0u;){
+        --i;
+        r=(r<<1u)|((n>>i)&1u);
+        u64 mask=(u64)0-(u64)(r>=(u64)d);
+        r-=((u64)d)&mask;
+        q|=(mask&1u)<<i;
+    }
+    return q;
+}
+
 /* ── UI DE STATUS ──────────────────────────────────────────────────────── */
 static void STATUS(u8 flags,const char*msg){
     PS("\033[1;36m[");
@@ -379,7 +396,7 @@ void browser_main(void){
     PS("  Status:   ");PN(_BC.status);
     PS("  TX bytes: ");PN(_BC.tx_bytes);
     PS("  RX bytes: ");PN(_BC.rx_bytes);
-    PS("  Latência: ");PN(_BC.t_ns/1000000u);PS("ms\n");
+    PS("  Latência: ");PN(BR_DIV_U64_U32(_BC.t_ns,1000000u));PS("ms\n");
     PS("  Flags:    ");PH(_BC.flags);
     PS("  TLS roadmap: ");PH(_BC.tls);
     HEADER_LINE();
@@ -391,7 +408,7 @@ void browser_main(void){
         PS("    status=");PN(_BC.status);
         PS("    tx=");PN(_BC.tx_bytes);
         PS("    rx=");PN(_BC.rx_bytes);
-        PS("    t_ms=");PN(_BC.t_ns/1000000u);PS("\n");
+        PS("    t_ms=");PN(BR_DIV_U64_U32(_BC.t_ns,1000000u));PS("\n");
         PS("    flags finais=");PH(_BC.flags);
     }
 
