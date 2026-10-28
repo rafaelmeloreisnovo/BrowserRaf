@@ -193,20 +193,40 @@ static s32 DO_FETCH_R(BCtx*ctx,u32 redirects){
     /* Acumula response em _NB */
     {
         u32 max=NET_BUF-1u;
-        u8 eof=0u;
-        u8 io_error=0u;
+        u8 eof=0u,io_error=0u,framed_complete=0u;
         while(total<max){
             s32 r=RECV(ctx->fd,(void*)(_NB+total),max-total);
-            if(r<0){io_error=1u;break;} /* timeout/error != EOF */
+            if(r<0){io_error=1u;break;}
             if(r==0){eof=1u;break;}
             total+=(u32)r;
+            /* HTTP/1.1: a valid Content-Length defines the body boundary.
+             * A server may keep the connection open despite our request to
+             * close it. Do not hang or report truncation after exact body. */
+            u32 header_off=HTTP_HEADERS_END(_NB,total);
+            if(header_off){
+                s32 te=HTTP_TRANSFER_ENCODING(_NB,header_off);
+                u32 expected=0u;
+                s32 cl=HTTP_CONTENT_LENGTH(_NB,header_off,&expected);
+                if(te<0||cl<0||(te==1&&cl==1)){
+                    io_error=1u;break;
+                }
+                if(te==0&&cl==1){
+                    if(header_off>max||expected>max-header_off||
+                       total-header_off>expected){
+                        io_error=1u;break;
+                    }
+                    if(total-header_off==expected){
+                        framed_complete=1u;break;
+                    }
+                }
+            }
         }
         _NB[total]=0;
-        /* In a Connection:close HTTP/1.1 subset, a verified EOF is needed.
-         * At buffer capacity we cannot know whether bytes were truncated. */
-        if(io_error||!eof||total==0u){
+        /* For close-delimited or chunked body retain conservative EOF rule;
+         * Content-Length responses may finish at exact advertised bytes. */
+        if(io_error||(!eof&&!framed_complete)||total==0u){
             FF_SET(ctx->flags,FL_ERROR);
-            STATUS(ctx->flags,"HTTP response incompleta ou erro de I/O");
+            STATUS(ctx->flags,"HTTP response incompleta, framing invalido ou erro de I/O");
             goto done;
         }
     }
