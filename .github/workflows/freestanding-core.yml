@@ -32,3 +32,21 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq qemu-user
       - name: Execute ARM32 and ARM64 Linux-syscall ELF emulation
         run: sh tests/check_qemu_abis.sh
+  pixel-manifold:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Execute scalar pixel/geometry reference vectors with sanitizers
+        run: sh tests/check_pixel_vectors.sh
+      - name: Compile freestanding pixel kernel for ARM32 and ARM64 ABIs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for triple in armv7a-linux-androideabi21 aarch64-linux-android28; do
+            clang --target="$triple" -O2 -ffreestanding -fno-builtin \
+              -fno-stack-protector -nostdlib -Wall -Wextra -Werror \
+              -Iinternal -c tests/pixel_freestanding_probe.c -o "$RUNNER_TEMP/$triple-pixel.o"
+            readelf -h "$RUNNER_TEMP/$triple-pixel.o" | grep -q 'Class:'
+          done
+          echo 'PASS_SCOPED_COMPILE_ONLY ARM32 ARM64 pixel module'
