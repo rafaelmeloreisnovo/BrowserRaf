@@ -82,8 +82,49 @@ static void html(void) {
     CHECK(HTML_RENDER((const u8*)0,3u,out,sizeof(out))==0u && out[0]==0u);
 }
 
+
+/* Offline deterministic mutation corpus: bounded, seeded, reproducible.
+ * Exercises raw truncated/untrusted bytes through the actual public parsers.
+ * The CI sanitizer is test-only, never linked into the freestanding build. */
+static u32 next_mutation(u32 *s) {
+    u32 v=*s;
+    v^=v<<13u;
+    v^=v>>17u;
+    v^=v<<5u;
+    *s=v;
+    return v;
+}
+static void deterministic_mutations(void) {
+    u32 seed=0xBADC0DEu;
+    for(u32 run=0u;run<4096u;run++){
+        u8 raw[160],dechunk[160],rendered[256];
+        u32 n=next_mutation(&seed)%129u;
+        for(u32 j=0u;j<n;j++){
+            u32 r=next_mutation(&seed);
+            raw[j]=(u8)(r&0xFFu);
+            dechunk[j]=raw[j];
+        }
+        raw[n]=0u;
+        (void)HTTP_PARSE_STATUS(raw,n);
+        (void)HTTP_HEADERS_END(raw,n);
+        u32 content_len=0u;
+        (void)HTTP_CONTENT_LENGTH(raw,n,&content_len);
+        u32 decoded=HTTP_DECHUNK(dechunk,n);
+        CHECK(decoded==0xFFFFFFFFu||decoded<=n);
+        u32 len=HTML_RENDER(raw,n,rendered,(u32)sizeof(rendered));
+        CHECK(len<sizeof(rendered) && rendered[len]==0u);
+        BCtx c;
+        s32 status=URL_PARSE((const char*)raw,&c);
+        if(status==0) {
+            CHECK(c.host[0]!=0u);
+            CHECK(c.port>0u && c.port<=65535u);
+            CHECK(c.path[0]=='/');
+        }
+    }
+}
+
 int main(void) {
-    urls();http();html();
+    urls();http();html();deterministic_mutations();
     fprintf(stderr,"BrowserRaf negative fixtures: %u checks, %u failed\n",checks,failures);
     return failures?1:0;
 }
