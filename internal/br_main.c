@@ -66,10 +66,6 @@ static s32 SEND_ALL(s32 fd,const void*buf,u32 n){
     return(s32)off;
 }
 
-static void WR_SAFE(u32 fd,const void*b,u32 n){
-    if(n)(void)WR(fd,b,n);
-}
-
 
 /* ── FETCH HTTP ─────────────────────────────────────────────────────────── */
 static s32 DO_FETCH_R(BCtx*ctx,u32 redirects){
@@ -176,7 +172,7 @@ static s32 DO_FETCH_R(BCtx*ctx,u32 redirects){
         goto done;
     }
     PS("  Request (");PN(reqlen);PS("B):\n");
-    WR_SAFE(2,_NB,reqlen); /* debug: imprime request no stderr */
+    /* Do not echo HTTP path/query/headers to stderr: potential PII. */
     s32 sent=SEND_ALL(ctx->fd,_NB,reqlen);
     if(sent<0||(u32)sent!=reqlen){
         FF_SET(ctx->flags,FL_ERROR);
