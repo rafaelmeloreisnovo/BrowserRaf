@@ -61,7 +61,7 @@ def case(name, response, expected_success):
     print("PASS_LOOPBACK %s expected_success=%s" % (name, expected_success))
 
 
-def redirect_same_origin():
+def redirect_same_origin(use_direct=False):
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind(("127.0.0.1", 0))
@@ -95,14 +95,16 @@ def redirect_same_origin():
     t=threading.Thread(target=serve,daemon=True)
     t.start()
     try:
-        p=subprocess.run([BIN,"http://127.0.0.1:%d/probe" % port],
-                         capture_output=True,timeout=12,check=False)
+        cmd=[BIN,"http://%s:%d/probe" % ("localhost" if use_direct else "127.0.0.1",port)]
+        if use_direct: cmd.append("--connect-ip=127.0.0.1")
+        p=subprocess.run(cmd,capture_output=True,timeout=12,check=False)
     finally:
         t.join(timeout=6)
     out=(p.stdout+p.stderr).decode(errors="replace")
     if problems or t.is_alive() or "[OK] Fetch completo" not in out or "[REDIRECT]" not in out:
         raise AssertionError("redirect_same_origin: problems=%r output=%s" %(problems,out[-1600:]))
-    print("PASS_LOOPBACK same-origin 302 redirect with 2 real requests")
+    print("PASS_LOOPBACK same-origin 302 redirect with 2 real requests" +
+          (" pinned-direct-ip" if use_direct else ""))
 
 def interactive_navigation():
     srv=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
@@ -185,8 +187,20 @@ case("duplicate_encoding", b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\ntr
 case("http_404", b"HTTP/1.1 404 Not Found\r\nContent-Length: 3\r\n\r\nBAD", False)
 case("cross_origin_redirect", b"HTTP/1.1 302 Found\r\nLocation: //example.org/\r\nContent-Length: 0\r\n\r\n", False)
 redirect_same_origin()
+redirect_same_origin(use_direct=True)
 interactive_navigation()
 content_length_without_eof()
 case("binary_mime", b"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: 8\r\n\r\nRAW-DATA", False)
 case("text_plain", b"HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 18\r\n\r\n<script>X</script>", True)
-print("PASS_SCOPED 13 real ELF loopback HTTP sessions; no external DNS or internet")
+# Malformed pin, unsafe reroute and pin+interactive must fail before networking.
+for extra in [
+    ["http://example.org/","--connect-ip=127.0.0.1"],
+    ["http://example.org/","--connect-ip=999.0.0.1"],
+    ["http://localhost/","--connect-ip=127.0.0.1","--interactive"],
+    ["https://example.org/","--connect-ip=93.184.216.34"],
+]:
+    result=subprocess.run([BIN]+extra,capture_output=True,timeout=3,check=False)
+    output=(result.stdout+result.stderr).decode(errors="replace")
+    if "[ERRO]" not in output or "[OK] Fetch completo" in output:
+        raise AssertionError("invalid direct-route accepted: " + repr(extra))
+print("PASS_SCOPED 15 local HTTP sessions including pinned redirect; four route-negative cases")
