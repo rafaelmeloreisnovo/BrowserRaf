@@ -95,6 +95,40 @@ static void http(void) {
     CHECK(HTTP_DECHUNK(bad,sizeof(bad)-1u)==0xFFFFFFFFu);
 }
 
+
+static void dns_packets(void){
+    const u8 q[19]={0x12,0x34,1,0,0,1,0,0,0,0,0,0,1,'a',0,0,1,0,1};
+    u8 rsp[35]={0};
+    memcpy(rsp,q,sizeof(q));
+    rsp[2]=0x81;rsp[3]=0x80; /* QR+RD+RA, response code 0 */
+    rsp[6]=0;rsp[7]=1;      /* one answer */
+    rsp[19]=0xc0;rsp[20]=12; /* points to echoed question */
+    rsp[22]=1;rsp[24]=1;   /* A, IN */
+    rsp[30]=4;             /* RDLENGTH */
+    rsp[31]=192;rsp[32]=0;rsp[33]=2;rsp[34]=123;
+    u8 ip[4]={0};
+    CHECK(DNS_PARSE_A_REPLY(rsp,sizeof(rsp),q,sizeof(q),ip)==0);
+    CHECK(ip[0]==192&&ip[1]==0&&ip[2]==2&&ip[3]==123);
+    rsp[0]^=1;
+    CHECK(DNS_PARSE_A_REPLY(rsp,sizeof(rsp),q,sizeof(q),ip)!=0);
+    rsp[0]^=1;
+    rsp[13]='z';
+    CHECK(DNS_PARSE_A_REPLY(rsp,sizeof(rsp),q,sizeof(q),ip)!=0);
+    rsp[13]='a';
+    rsp[20]=13;
+    CHECK(DNS_PARSE_A_REPLY(rsp,sizeof(rsp),q,sizeof(q),ip)!=0);
+    rsp[20]=12;
+    rsp[2]=0x83;
+    CHECK(DNS_PARSE_A_REPLY(rsp,sizeof(rsp),q,sizeof(q),ip)!=0);
+    rsp[2]=0x81;
+    CHECK(DNS_PARSE_A_REPLY(rsp,34u,q,sizeof(q),ip)!=0);
+    CHECK(PARSE_IP("127.0.0.1",ip)==0);
+    CHECK(PARSE_IP("1..2.3",ip)!=0);
+    CHECK(PARSE_IP("1.2.3.",ip)!=0);
+    CHECK(PARSE_IP("01.2.3.4",ip)!=0);
+    CHECK(PARSE_IP("256.2.3.4",ip)!=0);
+}
+
 static void html(void) {
     u8 out[256];
     u8 sentinel=0xA5u;
@@ -141,6 +175,9 @@ static void deterministic_mutations(void) {
         u32 content_len=0u;
         (void)HTTP_CONTENT_LENGTH(raw,n,&content_len);
         (void)HTTP_TRANSFER_ENCODING(raw,n);
+        const u8 q[19]={0x12,0x34,1,0,0,1,0,0,0,0,0,0,1,'a',0,0,1,0,1};
+        u8 ip4[4]={0};
+        (void)DNS_PARSE_A_REPLY(raw,n,q,sizeof(q),ip4);
         u32 decoded=HTTP_DECHUNK(dechunk,n);
         CHECK(decoded==0xFFFFFFFFu||decoded<=n);
         u32 len=HTML_RENDER(raw,n,rendered,(u32)sizeof(rendered));
@@ -156,7 +193,7 @@ static void deterministic_mutations(void) {
 }
 
 int main(void) {
-    urls();http();html();deterministic_mutations();
+    urls();http();dns_packets();html();deterministic_mutations();
     fprintf(stderr,"BrowserRaf negative fixtures: %u checks, %u failed\n",checks,failures);
     return failures?1:0;
 }
