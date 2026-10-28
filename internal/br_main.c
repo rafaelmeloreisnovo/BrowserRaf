@@ -70,43 +70,6 @@ static void WR_SAFE(u32 fd,const void*b,u32 n){
 }
 
 
-static u8 HTTP_IS_CHUNKED(const u8*buf,u32 n){
-    const char key[]="Transfer-Encoding";
-    u32 kl=(u32)(sizeof(key)-1u);
-    for(u32 i=0;i+kl+1u<n;i++){
-        u32 k=0u;
-        while(k<kl){
-            u8 a=buf[i+k],b=(u8)key[k];
-            if(a>='A'&&a<='Z')a=(u8)(a+('a'-'A'));
-            if(b>='A'&&b<='Z')b=(u8)(b+('a'-'A'));
-            if(a!=b)break;
-            k++;
-        }
-        if(k!=kl||buf[i+kl]!=':')continue;
-        u32 j=i+kl+1u;
-        while(j<n&&(buf[j]==' '||buf[j]=='\t'))j++;
-        while(j<n&&buf[j]!='\r'&&buf[j]!='\n'){
-            while(j<n&&(buf[j]==' '||buf[j]=='\t'||buf[j]==','))j++;
-            const char tok[]="chunked";
-            u32 t=0u;
-            while(t<7u&&j+t<n){
-                u8 c=buf[j+t],d=(u8)tok[t];
-                if(c>='A'&&c<='Z')c=(u8)(c+('a'-'A'));
-                if(c!=d)break;
-                t++;
-            }
-            if(t==7u){
-                u32 end=j+7u;
-                if(end>=n||buf[end]=='\r'||buf[end]=='\n'||buf[end]==' '||buf[end]=='\t'||buf[end]==',')
-                    return 1u;
-            }
-            while(j<n&&buf[j]!=','&&buf[j]!='\r'&&buf[j]!='\n')j++;
-            if(j<n&&buf[j]==',')j++;
-        }
-    }
-    return 0u;
-}
-
 /* ── FETCH HTTP ─────────────────────────────────────────────────────────── */
 static s32 DO_FETCH(BCtx*ctx){
     ctx->flags=FL_IDLE;
@@ -258,6 +221,13 @@ static s32 DO_FETCH(BCtx*ctx){
         goto done;
     }
     PS("  Status HTTP: ");PN(ctx->status);
+    /* This renderer supports 2xx response bodies only. Do not report a
+     * 301/404/500 as successful navigation; redirect support is gated. */
+    if(ctx->status<200u||ctx->status>=300u){
+        FF_SET(ctx->flags,FL_ERROR);
+        STATUS(ctx->flags,"HTTP status exige tratamento não implementado");
+        goto done;
+    }
 
     /* Content-Length: distinguish absent, malformed and fully parsed. */
     s32 cl_state=HTTP_CONTENT_LENGTH(_NB,total,&ctx->content_len);
@@ -280,7 +250,13 @@ static s32 DO_FETCH(BCtx*ctx){
         goto done;
     }
     u32 body_len=total-body_off;
-    u8 is_chunked=HTTP_IS_CHUNKED(_NB,body_off);
+    s32 te_state=HTTP_TRANSFER_ENCODING(_NB,body_off);
+    if(te_state<0){
+        FF_SET(ctx->flags,FL_ERROR);
+        STATUS(ctx->flags,"Transfer-Encoding ou headers inválidos");
+        goto done;
+    }
+    u8 is_chunked=(u8)(te_state==1);
     /* Concurrent chunked framing and Content-Length is ambiguous:
      * do not guess which one controls the response body. */
     if(is_chunked&&cl_state==1){
