@@ -35,3 +35,16 @@ Status: proposed architecture constraints and existing scoped evidence, NOT a pr
 - Rollback: discard the isolated draft branch; the original RafGitTools producer main and BrowserRaf public main are unchanged.
 
 `SOURCE ≠ ARTIFACT ≠ EXECUTION ≠ EVIDENCE ≠ CLAIM`.
+
+## Verified successor S4 — 2026-10-28
+
+The table above describes the historical S3 state; this successor records the latest verified scope without erasing that history:
+
+| Target | Link proof | Execution proof |
+|---|---|---|
+| x86-64 Linux host | Static no-libc ELF, no INTERP/NEEDED | Executed HTTPS pre-network refusal and 3 offline HTTP loopback sessions: PASS_SCOPED |
+| ARMv7 Android ABI | C+ASM objects and static freestanding ELF link; no INTERP/NEEDED/unresolved symbols | **NOT_RUN on ARM hardware / Termux** |
+| AArch64 Android ABI | C+ASM objects and static freestanding ELF link; no INTERP/NEEDED/unresolved symbols | **NOT_RUN on ARM hardware / Termux** |
+| OS-less bare metal | NO board-specific binary | **NOT_IMPLEMENTED** |
+
+The missing ARM compiler-helper `__aeabi_uldivmod` was reproduced by the first link attempt and fixed by a 64-iteration no-runtime routine, checked against 1,091 host division reference cases. Four thousand ninety-six deterministic malformed-input mutations were checked under ASan/UBSan (8,289 checks, zero failures). Exact successful executable/test HEAD `541d1d0d2d0d623f8eaeee0000433f651e9b3bab`, run `40653023809` with all 3 jobs green. Device execution and security audit remain blocking for release. More detailed full chronology: `docs/SOURCE_MANIFEST.md` S4.
