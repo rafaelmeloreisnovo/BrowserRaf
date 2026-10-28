@@ -1,19 +1,52 @@
-# BrowserRaf — freestanding C/Assembly browser core
+# BrowserRaf — freestanding terminal HTTP browser (experimental)
 
-**Status: isolated public port candidate / DRAFT / HOLD.** This is the existing BrowserRaf core, not a rewrite. It is an experimental HTTP/1.1 text-mode browser; **HTTPS is fail-closed**, not TLS 1.3 authenticated. It is not yet a general-purpose browser: JavaScript, DOM/CSS, cookies/WebSocket and modern web-app compatibility are not implemented.
+**Public DRAFT PR candidate — HOLD; no merge, no release or production security certification.**
 
-## Provenance and architecture
+BrowserRaf is a **text-mode HTTP/1.1 browser** with a C/Assembly core, fixed-size static buffers, no libc/malloc/GC in the produced executable, and separate Linux/Android syscall ABIs for x86-64, ARMv7 and AArch64. It is **not** a WebView/Chromium-class browser: no DOM/CSS layout engine, JavaScript, cookies, forms, WebSockets or image renderer. **HTTPS is deliberately FAIL-CLOSED**, because the TLS 1.3 ClientHello fragment is not a trusted, authenticated TLS client.
 
-Existing implementation comes from [RafGitTools/BrowserRaf/internal](https://github.com/rafaelmeloreisnovo/RafGitTools/tree/05b94848c5d3d359b9e02085fa07ef562f8c380a/BrowserRaf/internal) pinned at `05b94848c5d3d359b9e02085fa07ef562f8c380a`. The original source stays in place, unmodified. See [SOURCE_MANIFEST](docs/SOURCE_MANIFEST.md) for per-file Git object identity.
+## Current implemented subset
 
-The core is C/Assembly, no malloc, libc or GC, with code paths for ARM32, ARM64 and x86-64. It is a **freestanding Linux/Android userspace process using syscalls**, not OS-less bare metal. No network credential or API-token integration is proposed. Read [SAFETY_GATES](docs/SAFETY_GATES.md) before executing or promoting.
+- Parse bounded `http://` URLs including paths, query strings, fragments and explicit ports; reject unsupported schemes and ambiguous hosts.
+- IPv4 literals or DNS A lookups; DNS uses connected UDP, a getrandom-generated transaction ID, exact question echo and bounded record parser. **Resolver is still hardcoded to 8.8.8.8, plaintext and non-DNSSEC; DNS privacy and configuration remain open.**
+- HTTP/1.1 GET with correct `Host` port, no connection pooling, no cookies, full exact `Content-Length` framing, strict single `chunked` transfer support, no implicit gzip/other codings. Maximum response buffer is currently 65,536 bytes.
+- 301/302/303/307/308 redirect support **only for same-origin absolute paths** (`/next`), at most four hops. Cross-origin, HTTPS and scheme-relative redirects are intentionally denied until separately implemented.
+- Text/ANSI HTML rendering, script/style raw source suppression; print up to 24 sanitized anchor URLs. `--interactive` supports numeric link selection, relative links and 8-page volatile back history. No persistence.
+- Receive and send kernel timeouts requested for TCP; connection-timeout behavior on physical Android still requires verification.
 
-## Test
+## Run and test
 
-On a compatible x86-64 host with Clang and binutils: `sh tests/check_host_freestanding.sh`. The test makes **no network request** and checks host compilation plus ELF dependency boundaries. It does not validate ARM device behavior, HTTP parser security, or TLS.
+On a compatible Linux x86-64 host with Clang:
 
-## Licensing and release
+```sh
+sh tests/check_host_freestanding.sh
+sh tests/check_cross_abi_objects.sh
+sh tests/check_negative_fixtures.sh
+```
 
-The imported source is supplied under the existing RafGitTools GPL-3.0-or-later notice; LICENSE is copied unchanged from the source. Third-party contributor and legal review remain a release gate. No automatic merge, production build, or security/HTTPS claim.
+The host smoke test exercises a real no-libc ELF against offline loopback HTTP servers. The negative harness uses ASan/UBSan **only in the test executable**. CI also runs QEMU ARM32/ARM64 tests with a CI-only QEMU package; emulation is not physical Android evidence.
 
-`SOURCE != ARTIFACT != EXECUTION != EVIDENCE != CLAIM`; `claim_allowed=false`.
+To browse from a **checked-out source tree** with a suitable native compiler and Linux kernel:
+
+```sh
+clang -O2 -ffreestanding -fno-builtin -fno-stack-protector -nostdlib -static \
+  -Wl,-e,_start -Wl,-z,noexecstack \
+  -Iinternal internal/br_start.S internal/br_main.c -o browserraf
+./browserraf http://127.0.0.1:8080/
+./browserraf http://127.0.0.1:8080/ --interactive
+```
+
+On **Android Termux**, from that source tree, perform the **no-root, offline, native build/safety smoke** with one command:
+
+```sh
+sh tests/check_termux_device.sh
+```
+
+This creates only a scoped local receipt and does **not** claim HTTP behavior on the device; it has not been executed on a physical phone in this PR.
+
+## Source and release boundary
+
+The initial port copied 11/11 original Git blobs identically from [RafGitTools BrowserRaf](https://github.com/rafaelmeloreisnovo/RafGitTools/tree/05b94848c5d3d359b9e02085fa07ef562f8c380a/BrowserRaf/internal), and only the isolated candidate branch was subsequently hardened. The producer remains unchanged. See [SOURCE_MANIFEST](docs/SOURCE_MANIFEST.md), [MULTI_ABI_BAREMETAL_BOUNDARY](docs/MULTI_ABI_BAREMETAL_BOUNDARY.md), [SAFETY_GATES](docs/SAFETY_GATES.md) and [PRODUCT_READINESS](docs/PRODUCT_READINESS.md).
+
+Original copied LICENSE is GPL-3.0-or-later; complete legal/contributor review is pending. This is **freestanding Linux/Android user space using kernel syscalls**, not OS-less bare metal. A real bare-metal board needs its own storage/clock/network/entropy/boot port.
+
+**SOURCE ≠ ARTIFACT ≠ EXECUTION ≠ EVIDENCE ≠ CLAIM. PROMOTION=HOLD.**
