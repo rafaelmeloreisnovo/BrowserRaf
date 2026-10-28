@@ -17,3 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sh tests/check_cross_abi_objects.sh
+  negative-fixtures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh tests/check_negative_fixtures.sh
