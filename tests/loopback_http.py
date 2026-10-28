@@ -50,6 +50,8 @@ def case(name, response, expected_success):
     finally:
         t.join(timeout=6)
     out = (p.stdout + p.stderr).decode("utf-8", errors="replace")
+    if b"GET /probe HTTP/1.1" in p.stderr:
+        problems.append("private HTTP request echoed to stderr")
     good = "[OK] Fetch completo" in out
     if problems or good != expected_success or t.is_alive():
         raise AssertionError("%s expected_success=%s got=%s; server=%s; output=%s" %
