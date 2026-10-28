@@ -93,8 +93,18 @@ static u8 HTTP_IS_CHUNKED(const u8*buf,u32 n){
 /* ── FETCH HTTP ─────────────────────────────────────────────────────────── */
 static s32 DO_FETCH(BCtx*ctx){
     ctx->flags=FL_IDLE;
+    ctx->fd=-1; /* no owned socket until SOCKET succeeds; never close fd 0 */
     u64 t0=NS();
     s32 rc=-1;
+
+    /* HTTPS must be refused BEFORE any DNS query, socket or TCP connection.
+     * ClientHello serialization alone is not a validated TLS stack. */
+    if(ctx->use_tls){
+        ctx->tls=TLS_UPGRADE_MASK(); /* roadmap bits, never a capability */
+        FF_SET(ctx->flags,FL_ERROR);
+        STATUS(ctx->flags,"HTTPS não suportado neste build");
+        goto done;
+    }
 
     /* ── FASE 1: DNS resolve ─────────────────────────────────────────── */
     if(!BR_PHASE_NEXT(&ctx->flags,0u,FL_DNS,0u)){
@@ -166,18 +176,7 @@ static s32 DO_FETCH(BCtx*ctx){
         goto done;
     }
 
-    /* ── FASE 3: TLS (se HTTPS) ─────────────────────────────────────── */
-    if(ctx->use_tls){
-        FF_SET(ctx->flags,FL_TLS_HS);
-        ctx->tls=TLS_UPGRADE_MASK(); /* módulo pré-coded para upgrade futuro */
-        FF_SET(ctx->flags,FL_ERROR);
-        FF_CLR(ctx->flags,FL_CONNECT|FL_TLS_HS);
-        STATUS(ctx->flags,"HTTPS não suportado neste build");
-        PS("  [TLS] HTTPS não suportado neste build\n");
-        PS("  [TLS-UPGRADE] roadmap mask=");PH(ctx->tls);
-        PS("  [TLS-UPGRADE] etapas: x25519 hkdf transcript aead finished records\n");
-        goto done;
-    }
+    /* HTTPS rejection happens at function entry before any network activity. */
 
     /* ── FASE 4: HTTP request ────────────────────────────────────────── */
     /* DNS -> CONNECT happened, but HTTP_TX must be entered before
