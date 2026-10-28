@@ -12,6 +12,9 @@
 #include "br_html.h"
 #include "br_dns.h"
 #include "br_links.h"
+/* Explicit per-process endpoint override; no external resolver is consulted. */
+static u8 _BR_FORCED_IP[4];
+static u8 _BR_FORCED_IP_SET=0u;
 #ifndef AT_FDCWD
 #define AT_FDCWD (-100)
 #endif
@@ -92,14 +95,33 @@ static s32 DO_FETCH_R(BCtx*ctx,u32 redirects){
     STATUS(ctx->flags,"Resolvendo DNS...");
     u8 ttl=3;
     s32 dns_ok=-1;
-    while(ttl--){
-        dns_ok=DNS_RESOLVE(ctx->host,ctx->ip);
-        if(dns_ok==0)break;
-        PS("  [RETRY DNS]\n");
+    if(redirects>0u){
+        /* Same-origin redirects retain the exact address used at hop zero.
+         * Re-resolving would allow a DNS rebinding between HTTP requests. */
+        dns_ok=0;
+        PS("  [ROUTE] IP do primeiro salto preservado\n");
+    }else if(_BR_FORCED_IP_SET){
+        MC(ctx->ip,_BR_FORCED_IP,4u);
+        dns_ok=0;
+        PS("  [ROUTE] IP explicito; nenhuma consulta DNS\n");
+    }else{
+        while(ttl--){
+            dns_ok=DNS_RESOLVE(ctx->host,ctx->ip);
+            if(dns_ok==0)break;
+            PS("  [RETRY DNS]\n");
+        }
+        /* Numeric IP URLs are explicit destinations (including local labs).
+         * Hostname DNS must not silently select a private/reserved address. */
+        u8 literal[4];
+        if(dns_ok==0&&PARSE_IP(ctx->host,literal)!=0&&
+           !BR_IPV4_GLOBAL_CANDIDATE(ctx->ip)){
+            dns_ok=-1;
+            STATUS(ctx->flags,"DNS retornou endereco especial/bloqueado");
+        }
     }
     if(dns_ok!=0){
         FF_SET(ctx->flags,FL_ERROR);
-        STATUS(ctx->flags,"DNS falhou");
+        STATUS(ctx->flags,"DNS falhou ou rota bloqueada");
         goto done;
     }
     PS("  IP: ");PN(ctx->ip[0]);
@@ -417,16 +439,40 @@ void browser_main(void){
     s32 cfd=(s32)_sc3(2u,(u64)(usize)"/proc/self/cmdline",0,0);
     if(cfd>=0){_sc3(0u,(u64)cfd,(u64)(usize)_CMD,511u);_sc1(3u,(u64)cfd);}
 #endif
-    /* Pula arg0 (programa), pega arg1 se existe */
-    u8 interactive=0u;
-    {u32 ci=0;while(ci<511u&&_CMD[ci])ci++;ci++;
-     if(ci<511u&&_CMD[ci]){
+    /* Bounded cmdline: reject unknown, duplicate and truncated options.
+     * --connect-ip=IP pins an endpoint without contacting DNS. It does NOT
+     * authenticate HTTP; HTTPS remains disabled before any network I/O. */
+    u8 interactive=0u,bad_option=0u;
+    {u32 ci=0u;
+     while(ci<511u&&_CMD[ci])ci++;
+     if(ci>=511u)bad_option=1u;
+     else if(++ci<511u&&_CMD[ci]){
          url=(const char*)(_CMD+ci);
          while(ci<511u&&_CMD[ci])ci++;
-         ci++;
-         if(ci<511u&&SL((const char*)(_CMD+ci))==13u&&
-            BR_MEMCMP(_CMD+ci,"--interactive",13u)==0)interactive=1u;
+         if(ci>=511u)bad_option=1u;
+         else{
+             ci++;
+             while(ci<511u&&_CMD[ci]){
+                 const char*arg=(const char*)(_CMD+ci);
+                 u32 al=0u;
+                 while(ci+al<511u&&_CMD[ci+al])al++;
+                 if(ci+al>=511u){bad_option=1u;break;}
+                 if(al==13u&&BR_MEMCMP(arg,"--interactive",13u)==0){
+                     if(interactive)bad_option=1u;
+                     interactive=1u;
+                 }else if(al>13u&&BR_MEMCMP(arg,"--connect-ip=",13u)==0){
+                     if(_BR_FORCED_IP_SET||PARSE_IP(arg+13u,_BR_FORCED_IP)!=0)
+                         bad_option=1u;
+                     else _BR_FORCED_IP_SET=1u;
+                 }else bad_option=1u;
+                 ci+=al+1u;
+             }
+         }
      }}
+    if(bad_option||(_BR_FORCED_IP_SET&&interactive)){
+        PS("[ERRO] opcao invalida ou --connect-ip com --interactive\n");
+        EX();
+    }
 
     PS("\033[1;37mURL: \033[0;36m");PS(url);PS("\033[0m\n\n");
 
@@ -435,6 +481,15 @@ void browser_main(void){
     if(URL_PARSE(url,&_BC)!=0){
         PS("\033[1;31m[ERRO] URL inválida\033[0m\n");
         EX();
+    }
+    if(_BR_FORCED_IP_SET){
+        u8 numeric_host[4];
+        if(_BC.use_tls||PARSE_IP(_BC.host,numeric_host)==0||
+           !BR_OVERRIDE_IP_ALLOWED(_BC.host,_BR_FORCED_IP)){
+            PS("[ERRO] rota direta recusada (host/IP/TLS)\n");
+            EX();
+        }
+        PS("[AVISO] HTTP direto por IP: DNS ignorado, conteudo nao autenticado\n");
     }
 
     PS("Host: ");PS(_BC.host);PS("\n");
