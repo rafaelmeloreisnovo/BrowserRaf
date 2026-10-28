@@ -24,3 +24,12 @@ PR_POLICY=DRAFT_HOLD; no auto-merge; no release
 **Boundary:** only already-public `BrowserRaf/internal/` files plus the originating `LICENSE`. Do not copy unrelated GaiaPhi files, generated shell archives, private credentials or personal data.
 
 A validated source-object SHA proves exact file content, not runtime safety. CI, ARM ABI/device test, HTTPS trust, independent reviewer and legal completeness remain separate gates. Rollback: close draft PR, discard isolated branch; main remains intact.
+
+## Post-import ABI corrections (successor; never rewrite original provenance)
+
+The original import at commit `381dc68e4eeab257c6fa6e810775aaa183ea5832` passed **11/11 identical Git blob SHAs** against the pinned RafGitTools source. Subsequent isolated verification exposed two architecture-specific assembly issues in the **destination branch only**:
+
+1. ARM GNU-stack assembler section type needs `%progbits`, whereas x86-64 uses `@progbits`. Scoped fix commit `8de2c3377a2f2418e35d8ab2cbb2ab6bb782acd5`.
+2. The AArch64 instruction `and sp,sp,#-16` is invalid; Linux ELF process entry already provides 16-byte SP alignment. The invalid operation was removed, with that ABI precondition documented. Scoped fix commit `9d5675cfe1fa7c2dd17ef0e1a31c41453acdd26e`.
+
+Current `internal/br_start.S` has **deviated intentionally** from source blob `a390af27d0f99f1daa894e0cec88854ddf6707fb` to destination blob `dee15ce56700b4dca8a4398ac7198ae96e848d4a`. All other ten imported objects (9 files plus LICENSE) still match their original source Git blob SHAs. No change was made to the RafGitTools source. This note is an append-only successor to the initial transfer receipt; compile-only ABI CI and real-device runtime validation must remain independently bound to an exact branch HEAD.
