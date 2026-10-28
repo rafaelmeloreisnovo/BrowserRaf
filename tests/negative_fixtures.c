@@ -4,6 +4,7 @@
 #include <string.h>
 #include "../internal/br_dns.h"
 #include "../internal/br_html.h"
+#include "../internal/br_links.h"
 
 static unsigned checks=0u, failures=0u;
 #define CHECK(x) do { checks++; if(!(x)){ failures++; \
@@ -129,6 +130,32 @@ static void dns_packets(void){
     CHECK(PARSE_IP("256.2.3.4",ip)!=0);
 }
 
+static void links(void){
+    const char page[]="<a href='/next?q=1&amp;v=2'>GO</a>"
+        "<!-- <a href='/comment'>hidden</a> -->"
+        "<script><a href='/evil'>HIDDEN</a></script>"
+        "<a href='javascript:alert(1)'>BAD</a>"
+        "<a href='https://example.org/secure'>SECURE</a>";
+    CHECK(BR_LINK_SCAN((const u8*)page,(u32)(sizeof(page)-1u))==2u);
+    CHECK(strcmp(_BR_LINKS[0].href,"/next?q=1&v=2")==0);
+    CHECK(strcmp(_BR_LINKS[1].href,"https://example.org/secure")==0);
+    BCtx c;
+    CHECK(URL_PARSE("http://example.com/base/start",&c)==0);
+    CHECK(BR_LINK_FOLLOW(&c,1u)==0);
+    CHECK(strcmp(c.path,"/next?q=1&v=2")==0);
+    CHECK(c.use_tls==0u);
+    CHECK(BR_LINK_FOLLOW(&c,2u)==0);
+    CHECK(c.use_tls==1u); /* HTTPS will still fail closed before networking. */
+    CHECK(BR_LINK_FOLLOW(&c,3u)!=0);
+    const char rel[]="<a href='other.html'>relative</a><a href='?x=1'>query</a>";
+    CHECK(BR_LINK_SCAN((const u8*)rel,sizeof(rel)-1u)==2u);
+    CHECK(URL_PARSE("http://example.com/a/b.html",&c)==0);
+    CHECK(BR_LINK_FOLLOW(&c,1u)==0);
+    CHECK(strcmp(c.path,"/a/other.html")==0);
+    CHECK(BR_LINK_FOLLOW(&c,2u)==0);
+    CHECK(strcmp(c.path,"/a/other.html?x=1")==0);
+}
+
 static void html(void) {
     u8 out[256];
     u8 sentinel=0xA5u;
@@ -175,6 +202,7 @@ static void deterministic_mutations(void) {
         u32 content_len=0u;
         (void)HTTP_CONTENT_LENGTH(raw,n,&content_len);
         (void)HTTP_TRANSFER_ENCODING(raw,n);
+        (void)BR_LINK_SCAN(raw,n);
         const u8 q[19]={0x12,0x34,1,0,0,1,0,0,0,0,0,0,1,'a',0,0,1,0,1};
         u8 ip4[4]={0};
         (void)DNS_PARSE_A_REPLY(raw,n,q,sizeof(q),ip4);
@@ -193,7 +221,7 @@ static void deterministic_mutations(void) {
 }
 
 int main(void) {
-    urls();http();dns_packets();html();deterministic_mutations();
+    urls();http();dns_packets();html();links();deterministic_mutations();
     fprintf(stderr,"BrowserRaf negative fixtures: %u checks, %u failed\n",checks,failures);
     return failures?1:0;
 }
