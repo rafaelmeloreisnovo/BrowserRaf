@@ -61,7 +61,7 @@ _start:
 _start:
     mov  x29,xzr
     mov  x30,xzr
-    and  sp,sp,#-16
+    /* ELF AArch64 process-entry ABI provides 16-byte-aligned SP; do not use SP as AND destination. */
     BR_BOOTSTRAP_ENTER_BROWSER_MAIN
     mov  x0,xzr
     mov  x8,#94
