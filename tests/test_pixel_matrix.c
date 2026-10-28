@@ -26,6 +26,8 @@ int main(void){
             CK(brpix_udiv(n,d)==n/d);
         }
     }
+    CK(brpix_udiv(0xffffffffu,0xffffffffu)==1u);
+    CK(brpix_udiv(0xffffffffu,0x80000000u)==1u);
     fprintf(stderr,"PASS_PIXEL %u checks/no libc in kernel\n",checks);
     return 0;
 }
