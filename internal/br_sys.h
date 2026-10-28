@@ -14,6 +14,7 @@
 #define CLOCK_MONO  1
 #define SOL_SOCKET  1
 #define SO_RCVTIMEO 20
+#define SO_SNDTIMEO 21
 #define MSG_NOSIGNAL 0x4000
 typedef struct PK { usize tv_sec; usize tv_usec; } BRTimeVal;
 typedef struct PK { u16 fam; u16 port_be; u8 ip[4]; u8 _z[8]; } SA4; /* sockaddr_in */
@@ -121,6 +122,13 @@ AI s32 SET_RECV_TIMEOUT(s32 fd,usize sec){
     tv.tv_sec=sec;
     tv.tv_usec=(usize)0u;
     return SETSOCKOPT(fd,SOL_SOCKET,SO_RCVTIMEO,&tv,(u32)sizeof(tv));
+}
+
+AI s32 SET_SEND_TIMEOUT(s32 fd,usize sec){
+    /* Kernel socket I/O send timeout also limits blocking connect on Linux;
+     * runtime behavior on a particular Android kernel needs device evidence. */
+    BRTimeVal tv;tv.tv_sec=sec;tv.tv_usec=(usize)0u;
+    return SETSOCKOPT(fd,SOL_SOCKET,SO_SNDTIMEO,&tv,(u32)sizeof(tv));
 }
 /* IP parse "a.b.c.d" → u8[4] */
 AI s32 PARSE_IP(const char*s,u8*ip){
