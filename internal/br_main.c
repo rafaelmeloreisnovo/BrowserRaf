@@ -203,7 +203,7 @@ static s32 DO_FETCH(BCtx*ctx){
         goto done;
     }
     STATUS(ctx->flags,"Enviando request HTTP...");
-    u32 reqlen=HTTP_BUILD_REQ(ctx->host,ctx->path,_NB,NET_BUF);
+    u32 reqlen=HTTP_BUILD_REQ_PORT(ctx->host,ctx->path,ctx->port,_NB,NET_BUF);
     if(!reqlen){
         FF_SET(ctx->flags,FL_ERROR);
         STATUS(ctx->flags,"HTTP request rejeitada: comprimento ou entrada invalida");
