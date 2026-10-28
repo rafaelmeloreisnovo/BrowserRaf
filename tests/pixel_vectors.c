@@ -38,7 +38,7 @@ static void color_vectors(void){
         BRPX_CMYK k=BRPX_TO_CMYK(a);
         BRPX_RGB b=BRPX_FROM_CMYK(k);
         C(a.r==b.r&&a.g==b.g&&a.b==b.b);
-        C(BRPX_LUMA(a)<=255u);
+        C(BRPX_PB(a,128u)==(u8)(BRPX_LUMA(a)>=128u));
     }
     /* No ICC gamut, press ink behavior, hue or historical motif is proven. */
 }
@@ -79,14 +79,15 @@ static void geometric_vectors(void){
 static void tiles(void){
     /* 2x2 red/green/blue/white; explicit channel order and tiled metadata. */
     const u8 src[]={255,0,0, 0,255,0, 0,0,255, 255,255,255};
-    BRPX_Tile a,b;
+    BRPX_Tile a={0},b={0};
     C(BRPX_TILE16(src,2u,2u,sizeof(src),&a)==0);
     C(a.samples==4u);
     C(a.mean_rgb[0]==127u&&a.mean_rgb[1]==127u&&a.mean_rgb[2]==127u);
     C(a.mean_y==127u);
     C(a.key[0]==3u&&a.key[1]==3u&&a.key[2]==3u);
     C(BRPX_TILE16(src,2u,2u,sizeof(src),&b)==0);
-    C(memcmp(&a,&b,sizeof(BRPX_Tile))==0);
+    C(a.mean_y==b.mean_y&&a.var_y==b.var_y&&a.grad_l1==b.grad_l1&&
+      memcmp(a.mean_rgb,b.mean_rgb,3u)==0&&memcmp(a.key,b.key,5u)==0);
     C(BRPX_TILE16(src,17u,1u,sizeof(src),&a)==-1);
     C(BRPX_TILE16(src,2u,2u,sizeof(src)-1u,&a)==-1);
     const u8 black[]={0u,0u,0u};
