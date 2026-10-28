@@ -29,6 +29,17 @@ static void urls(void) {
     memcpy(long_path,"http://a/",9);
     memset(long_path+9,'z',580);long_path[589]=0;
     CHECK(URL_PARSE(long_path,&c)!=0);
+    CHECK(URL_PARSE("http://example.com?lang=pt#local",&c)==0);
+    CHECK(strcmp(c.path,"/?lang=pt")==0);
+    CHECK(URL_PARSE("http://example.com/a?q=1#section",&c)==0);
+    CHECK(strcmp(c.path,"/a?q=1")==0);
+    CHECK(URL_PARSE("http://example.com#section",&c)==0);
+    CHECK(strcmp(c.path,"/")==0);
+    CHECK(URL_PARSE("ftp://example.com/file",&c)!=0);
+    CHECK(URL_PARSE("javascript:alert(1)",&c)!=0);
+    CHECK(URL_PARSE("http://host..name/",&c)!=0);
+    CHECK(URL_PARSE("http://host/path#fragment",&c)==0);
+    CHECK(strcmp(c.path,"/path")==0);
     CHECK(URL_PARSE("",&c)!=0);
     CHECK(URL_PARSE((const char*)0,&c)!=0);
 }
@@ -41,6 +52,13 @@ static void http(void) {
     CHECK(HTTP_BUILD_REQ("bad\r\nInjected:1","/",req,sizeof(req))==0u);
     CHECK(HTTP_BUILD_REQ("example.com","/\r\nX:y",req,sizeof(req))==0u);
     CHECK(HTTP_BUILD_REQ("example.com","/",req,5u)==0u);
+    n=HTTP_BUILD_REQ_PORT("example.com","/a?q=1",8080u,req,sizeof(req));
+    CHECK(n>0u && n<sizeof(req));
+    req[n]=0u;
+    CHECK(strstr((const char*)req,"Host: example.com:8080\r\n")!=0);
+    CHECK(strstr((const char*)req,"GET /a?q=1 HTTP/1.1\r\n")!=0);
+    CHECK(HTTP_BUILD_REQ_PORT("example.com","/",0u,req,sizeof(req))==0u);
+
 
     const char ok[]="HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\nBODY";
     const char malformed[]="HTTP/1.1 200 OK\r\nContent-Length: 4x\r\n\r\nBODY";
