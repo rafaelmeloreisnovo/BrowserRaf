@@ -17,3 +17,4 @@ if grep -Eq 'Resolvendo DNS|Conectando TCP|Enviando request HTTP' "$tmpdir/https
   echo 'FAIL HTTPS caused a network phase'; exit 1
 fi
 echo 'PASS_SCOPED: host ELF plus actual binary HTTPS pre-network fail-closed'
+python3 tests/loopback_http.py "$tmpdir/browserraf"
