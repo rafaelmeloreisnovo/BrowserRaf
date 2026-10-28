@@ -99,6 +99,48 @@ def redirect_same_origin():
         raise AssertionError("redirect_same_origin: problems=%r output=%s" %(problems,out[-1600:]))
     print("PASS_LOOPBACK same-origin 302 redirect with 2 real requests")
 
+def interactive_navigation():
+    srv=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+    srv.bind(("127.0.0.1",0))
+    srv.listen(2)
+    srv.settimeout(6)
+    port=srv.getsockname()[1]
+    problems=[]
+    def serve():
+        try:
+            for i,wanted in enumerate(("/probe","/second?x=1&y=2")):
+                conn,_=srv.accept()
+                with conn:
+                    conn.settimeout(4)
+                    req=bytearray()
+                    while b"\r\n\r\n" not in req and len(req)<2048:
+                        data=conn.recv(2048)
+                        if not data:break
+                        req.extend(data)
+                    if not req.startswith(("GET "+wanted+" HTTP/1.1\r\n").encode()):
+                        problems.append("wrong interactive path: "+repr(req[:90]))
+                    if i==0:
+                        html=b"<html><a href='/second?x=1&amp;y=2'>follow</a></html>"
+                        conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: "+str(len(html)).encode()+b"\r\n\r\n"+html)
+                    else:
+                        conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\nNEXT-PAGE")
+        except Exception as exc:
+            problems.append(str(exc))
+        finally:
+            srv.close()
+    t=threading.Thread(target=serve,daemon=True)
+    t.start()
+    try:
+        p=subprocess.run([BIN,"http://127.0.0.1:%d/probe"%port,"--interactive"],
+                         input=b"1\nq\n",capture_output=True,timeout=12,check=False)
+    finally:
+        t.join(timeout=6)
+    out=(p.stdout+p.stderr).decode(errors="replace")
+    if problems or t.is_alive() or "NEXT-PAGE" not in out or "Links disponíveis" not in out:
+        raise AssertionError("interactive_navigation failed %r %s" % (problems,out[-1800:]))
+    print("PASS_LOOPBACK interactive HTML link selection with encoded ampersand")
+
 case("content_length", b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\nConnection: close\r\n\r\nOK-LOCAL!", True)
 case("chunked", b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n", True)
 case("duplicate_length", b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\ncontent-length: 9\r\n\r\nBAD", False)
@@ -107,4 +149,5 @@ case("duplicate_encoding", b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\ntr
 case("http_404", b"HTTP/1.1 404 Not Found\r\nContent-Length: 3\r\n\r\nBAD", False)
 case("cross_origin_redirect", b"HTTP/1.1 302 Found\r\nLocation: //example.org/\r\nContent-Length: 0\r\n\r\n", False)
 redirect_same_origin()
-print("PASS_SCOPED 8 real ELF loopback HTTP sessions; no external DNS or internet")
+interactive_navigation()
+print("PASS_SCOPED 10 real ELF loopback HTTP sessions; no external DNS or internet")
