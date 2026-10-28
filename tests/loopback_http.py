@@ -31,6 +31,8 @@ def case(name, response, expected_success):
                     request.extend(data)
                 if not request.startswith(b"GET /probe HTTP/1.1\r\n"):
                     problems.append("invalid GET wire syntax")
+                if ("Host: 127.0.0.1:%d\r\n" % port).encode("ascii") not in request:
+                    problems.append("Host header omitted nondefault port")
                 if b"\x00" in request:
                     problems.append("NUL leaked into HTTP request")
                 conn.sendall(response)
@@ -57,4 +59,7 @@ def case(name, response, expected_success):
 case("content_length", b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\nConnection: close\r\n\r\nOK-LOCAL!", True)
 case("chunked", b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n", True)
 case("duplicate_length", b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\ncontent-length: 9\r\n\r\nBAD", False)
-print("PASS_SCOPED 3 real ELF loopback HTTP sessions; no external DNS or internet")
+case("unsupported_encoding", b"HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip\r\n\r\nBAD", False)
+case("duplicate_encoding", b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\ntransfer-encoding: chunked\r\n\r\n0\r\n\r\n", False)
+case("http_404", b"HTTP/1.1 404 Not Found\r\nContent-Length: 3\r\n\r\nBAD", False)
+print("PASS_SCOPED 6 real ELF loopback HTTP sessions; no external DNS or internet")
