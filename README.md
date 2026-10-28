@@ -50,3 +50,36 @@ The initial port copied 11/11 original Git blobs identically from [RafGitTools B
 Original copied LICENSE is GPL-3.0-or-later; complete legal/contributor review is pending. This is **freestanding Linux/Android user space using kernel syscalls**, not OS-less bare metal. A real bare-metal board needs its own storage/clock/network/entropy/boot port.
 
 **SOURCE ≠ ARTIFACT ≠ EXECUTION ≠ EVIDENCE ≠ CLAIM. PROMOTION=HOLD.**
+
+
+## Direct endpoint mode — experimental route control
+
+To **bypass DNS for one explicitly named HTTP host**:
+
+```sh
+./browserraf http://example.org/ --connect-ip=93.184.215.14
+```
+
+This selects the TCP IPv4 address explicitly while preserving `Host: example.org`.
+The address above is **illustrative only**, not a currently verified endpoint
+for that domain. For an offline loopback fixture, use
+`http://localhost:<port>/ --connect-ip=127.0.0.1`.
+
+- Ordinary URL IP literals already bypass DNS; `--connect-ip` supports a
+  **hostname plus an explicit destination**. It never performs DNS lookup.
+- An initial DNS result for a hostname is rejected if it falls in known
+  private/reserved IPv4 blocks; this conservative filter is not a full
+  IANA registry implementation, and public addresses can still be malicious.
+- Same-origin redirects reuse the first hop's IP; protocol, host and port
+  changes are still rejected by the existing redirect policy.
+- Direct pinning is intentionally incompatible with `--interactive` to
+  prevent a link navigation from inheriting a pin for the wrong origin.
+- `--connect-ip` cannot enable HTTPS. HTTP content remains plaintext and
+  **cannot be authenticated** against on-path attackers; DNSSEC/DoH alone would
+  not replace end-to-end TLS certificate and hostname verification.
+- **Security status:** route-control hardening only, NOT a secure browser
+  release. No credentials or sensitive traffic should be sent over HTTP.
+
+Future trusted HTTPS requires a reviewed TLS 1.3 implementation, verified
+certificate chain and hostname/SNI tied to the original URL (not the chosen
+IP), controlled trust anchors, authenticated redirects, and Android tests.
