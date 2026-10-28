@@ -26,6 +26,11 @@ int main(void){
             CK(brpix_udiv(n,d)==n/d);
         }
     }
+    /* One-bit input change can be invisible after BOTH lossy projections. */
+    BRPixRGB a={197u,215u,20u},b={196u,215u,20u};
+    CK(brpix_pb601(a)==187u&&brpix_pb601(b)==187u);
+    BRPixCMYK ac=brpix_cmyk(a),bc=brpix_cmyk(b);
+    CK(ac.c==bc.c&&ac.m==bc.m&&ac.y==bc.y&&ac.k==bc.k);
     CK(brpix_udiv(0xffffffffu,0xffffffffu)==1u);
     CK(brpix_udiv(0xffffffffu,0x80000000u)==1u);
     fprintf(stderr,"PASS_PIXEL %u checks/no libc in kernel\n",checks);
