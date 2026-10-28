@@ -52,8 +52,30 @@ static inline BRPixCMYK brpix_cmyk(BRPixRGB p){
 static inline BRPixRGB brpix_at(const brpix_u8*buf,brpix_u64 off){
     BRPixRGB p={buf[off],buf[off+1u],buf[off+2u]};return p;
 }
-static inline brpix_u32 brpix_absdiff(brpix_u32 a,brpix_u32 b){
-    return a>b?a-b:b-a;
+/* Input packed RGB/RGBA, stride=w*channels, no external references.
+ * Reversible raster transforms 0/90/180/270 clockwise. Geometry changes
+ * coordinate map but does not resample, re-color or premultiply alpha. */
+static s32 BRPX_ROTATE(const u8*src,u32 w,u32 h,u32 channels,u32 turns,
+                      u8*dst,u32 capacity){
+    if(!src||!dst||src==dst||!w||!h||w>256u||h>256u||
+       (channels!=3u&&channels!=4u)||turns>3u)return-1;
+    u32 pixels=w*h,bytes=pixels*channels;
+    if(pixels>65536u||capacity<bytes)return-1;
+    /* Reject ALL overlapping source/destination spans, not just src==dst.
+     * Integer-address subtraction is bounded by the target flat ABI. */
+    usize sa=(usize)src,da=(usize)dst;
+    if((da>=sa&&da-sa<(usize)bytes)||(sa>da&&sa-da<(usize)bytes))
+        return-1;
+    u32 dw=(turns&1u)?h:w;
+    for(u32 y=0u;y<h;y++)for(u32 x=0u;x<w;x++){
+        u32 ox=x,oy=y;
+        if(turns==1u){ox=h-1u-y;oy=x;}
+        else if(turns==2u){ox=w-1u-x;oy=h-1u-y;}
+        else if(turns==3u){ox=y;oy=w-1u-x;}
+        u32 from=(y*w+x)*channels,to=(oy*dw+ox)*channels;
+        for(u32 c=0u;c<channels;c++)dst[to+c]=src[from+c];
+    }
+    return (s32)bytes;
 }
 /* mode 1 blue, 2 orange; raw spatial moments are NOT source-space vectors.
  * Valid for dimensions in [1,4096], stride and total byte-size validated. */

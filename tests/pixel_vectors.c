@@ -60,6 +60,8 @@ static void geometric_vectors(void){
     C(BRPX_ROTATE(src,3u,2u,3u,4u,a,sizeof(a))==-1);
     C(BRPX_ROTATE(src,0u,2u,3u,0u,a,sizeof(a))==-1);
     C(BRPX_ROTATE(src,3u,2u,3u,0u,(u8*)src,sizeof(src))==-1);
+    u8 overlapping[40]={0};memcpy(overlapping,src,sizeof(src));
+    C(BRPX_ROTATE(overlapping,3u,2u,3u,1u,overlapping+1u,39u)==-1);
     u8 rgba[]={255,0,0,17, 0,255,0,34, 0,0,255,51, 255,255,255,68};
     u8 ro[16]={0},re[16]={0};
     C(BRPX_ROTATE(rgba,2u,2u,4u,1u,ro,sizeof(ro))==16);
