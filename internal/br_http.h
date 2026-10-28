@@ -159,6 +159,58 @@ static s32 HTTP_CONTENT_LENGTH(const u8*buf,u32 n,u32*out){
 /* Retorna offset do início do body (após \r\n\r\n) */
 
 
+/* Fail closed for unimplemented HTTP response transfer codings.
+ * Only a single Transfer-Encoding: chunked is supported; any other coding,
+ * repeated header, malformed value or folded header is rejected.
+ * Return -1 invalid, 0 absent, 1 chunked. */
+static s32 HTTP_TRANSFER_ENCODING(const u8*buf,u32 n){
+    if(!buf)return-1;
+    u32 hend=HTTP_HEADERS_END(buf,n);
+    if(!hend)return-1;
+    u32 pos=0u,first=1u,found=0u;
+    while(pos+1u<hend){
+        u32 end=pos;
+        while(end+1u<hend&&!(buf[end]=='\r'&&buf[end+1u]=='\n')){
+            u8 c=buf[end];
+            if(c==0u||c==0x7Fu||c<0x20u)return-1;
+            end++;
+        }
+        if(end+1u>=hend)return-1;
+        if(end==pos){
+            /* Empty line closes headers, must be the final CRLF. */
+            return(end+2u==hend)?(s32)found:-1;
+        }
+        if(first){
+            if(end<12u||HTTP_PARSE_STATUS(buf,end+2u)==0u)return-1;
+            first=0u;
+        }else{
+            u32 colon=pos;
+            while(colon<end&&buf[colon]!=':'){
+                u8 c=buf[colon];
+                if(!((c>='A'&&c<='Z')||(c>='a'&&c<='z')||
+                     (c>='0'&&c<='9')||c=='-'))return-1;
+                colon++;
+            }
+            if(colon==pos||colon==end)return-1;
+            if(colon-pos==17u&&BR_MEMCASECMP_ASCII(buf+pos,"Transfer-Encoding",17u)==0){
+                if(found)return-1;
+                u32 value=colon+1u;
+                while(value<end&&(buf[value]==' '||buf[value]=='\t'))value++;
+                u32 stop=end;
+                while(stop>value&&(buf[stop-1u]==' '||buf[stop-1u]=='\t'))stop--;
+                if(stop-value!=7u||BR_MEMCASECMP_ASCII(buf+value,"chunked",7u)!=0)return-1;
+                found=1u;
+            }
+            for(u32 k=colon+1u;k<end;k++){
+                u8 c=buf[k];
+                if((c<0x20u&&c!='\t')||c==0x7Fu)return-1;
+            }
+        }
+        pos=end+2u;
+    }
+    return-1;
+}
+
 /* ── DECHUNK IN-PLACE ───────────────────────────────────────────────────── */
 /* Retorna tamanho do body dechunkado, ou 0xFFFFFFFF em erro */
 static u32 HTTP_DECHUNK(u8*buf,u32 n){
