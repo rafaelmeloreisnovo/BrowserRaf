@@ -78,4 +78,8 @@ _start:
     xor  %rdi,%rdi
     syscall
 #endif
+#if defined(__arm__) || defined(__aarch64__)
+.section .note.GNU-stack,"",%progbits
+#else
 .section .note.GNU-stack,"",@progbits
+#endif
