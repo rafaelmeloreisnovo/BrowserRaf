@@ -52,16 +52,21 @@ static u32 HTTP_BUILD_REQ(const char*host,const char*path,u8*buf,u32 cap){
 /* ── PARSE DE STATUS LINE ───────────────────────────────────────────────── */
 /* "HTTP/1.1 200 OK\r\n" → retorna status code */
 static u32 HTTP_PARSE_STATUS(const u8*buf,u32 n){
-    /* Pula "HTTP/1.x " (9 chars) e lê 3 dígitos */
-    if(n<12u)return 0u;
-    if(buf[0]!='H'||buf[1]!='T'||buf[2]!='T'||buf[3]!='P')return 0u;
-    /* Pula até primeiro espaço */
-    u32 i=0;while(i<n&&buf[i]!=' ')i++;i++;
-    if(i+3u>=n)return 0u;
-    u32 code=0;
-    for(u32 j=0;j<3u;j++){
-        if(buf[i+j]<'0'||buf[i+j]>'9')return 0u;
-        code=code*10u+(u32)(buf[i+j]-'0');
+    /* Only the implemented HTTP/1.0 or 1.1 status-line syntax is accepted.
+     * A prefix match such as HTTP/9.9 or HTTPevil is not a valid response. */
+    if(!buf||n<14u)return 0u;
+    if(BR_MEMCMP(buf,"HTTP/1.",7u)!=0)return 0u;
+    if((buf[7]!='0'&&buf[7]!='1')||buf[8]!=' ')return 0u;
+    u32 code=0u;
+    for(u32 j=9u;j<12u;j++){
+        if(buf[j]<'0'||buf[j]>'9')return 0u;
+        code=code*10u+(u32)(buf[j]-'0');
+    }
+    if(code<100u||code>599u)return 0u;
+    if(buf[12]=='\\r'){
+        if(buf[13]!='\\n')return 0u;
+    }else if(buf[12]!=' '){
+        return 0u;
     }
     return code;
 }
@@ -109,6 +114,15 @@ static s32 HTTP_CONTENT_LENGTH(const u8*buf,u32 n,u32*out){
     if(!buf||!out)return-1;
     u32 hend=HTTP_HEADERS_END(buf,n);
     if(!hend)return-1;
+    /* Duplicate Content-Length is ambiguous even when values coincide.
+     * Reject the entire response, instead of trusting the first header. */
+    u32 occurrences=0u;
+    for(u32 i=0u;i+15u<hend;i++){
+        u32 bol=(i==0u)||((i>=2u)&&buf[i-2u]=='\\r'&&buf[i-1u]=='\\n');
+        if(bol&&BR_MEMCASECMP_ASCII(buf+i,"Content-Length",14u)==0&&buf[i+14u]==':'){
+            if(++occurrences>1u)return-1;
+        }
+    }
     const u8*value=HTTP_FIND_HEADER(buf,n,"Content-Length");
     if(!value)return 0;
     u32 off=(u32)(value-buf);
