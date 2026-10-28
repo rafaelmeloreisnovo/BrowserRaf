@@ -159,3 +159,20 @@ static u32 HTML_RENDER(const u8*html,u32 n,u8*out,u32 cap){
 #undef EMS
     return oi;
 }
+
+/* Plaintext MIME must not interpret any "<tag>" as markup. UTF-8 bytes are
+ * passed through unchanged; C0/DEL terminal controls are suppressed. */
+static u32 TEXT_RENDER(const u8*src,u32 n,u8*out,u32 cap){
+    if(!out||!cap)return 0u;
+    if(!src&&n){out[0]=0u;return 0u;}
+    u32 oi=0u;
+    for(u32 i=0u;i<n&&oi+1u<cap;i++){
+        u8 c=src[i];
+        if(c==0x7Fu||c==0x1Bu||c==0u)continue;
+        if(c=='\r'){out[oi++]='\n';continue;}
+        if(c<0x20u&&c!='\n'&&c!='\t')continue;
+        out[oi++]=c;
+    }
+    out[oi]=0u;
+    return oi;
+}
