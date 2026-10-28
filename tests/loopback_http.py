@@ -52,6 +52,8 @@ def case(name, response, expected_success):
     out = (p.stdout + p.stderr).decode("utf-8", errors="replace")
     if b"GET /probe HTTP/1.1" in p.stderr:
         problems.append("private HTTP request echoed to stderr")
+    if name == "text_plain" and "<script>X</script>" not in out:
+        problems.append("text/plain was parsed as HTML rather than literal text")
     good = "[OK] Fetch completo" in out
     if problems or good != expected_success or t.is_alive():
         raise AssertionError("%s expected_success=%s got=%s; server=%s; output=%s" %
@@ -185,4 +187,6 @@ case("cross_origin_redirect", b"HTTP/1.1 302 Found\r\nLocation: //example.org/\r
 redirect_same_origin()
 interactive_navigation()
 content_length_without_eof()
-print("PASS_SCOPED 11 real ELF loopback HTTP sessions; no external DNS or internet")
+case("binary_mime", b"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: 8\r\n\r\nRAW-DATA", False)
+case("text_plain", b"HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 18\r\n\r\n<script>X</script>", True)
+print("PASS_SCOPED 13 real ELF loopback HTTP sessions; no external DNS or internet")

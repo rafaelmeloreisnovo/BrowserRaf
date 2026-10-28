@@ -54,3 +54,19 @@ Current `internal/br_start.S` has **deviated intentionally** from source blob `a
 - Current original import identity = **8/11 objects**; three intentionally modified destination-only code files: `br_start.S`, `br_http.h`, and `br_main.c`. The first import remains **11/11 original blobs** at its pinned Git commit; fidelity must never be relabeled as ongoing byte identity.
 - TOKEN_VAZIO_NOT_RUN: physical ARM32/ARM64 Android devices, isolated board-level bare metal, TLS trust/PKIX, arbitrary network compatibility, broad parser fuzz, independent legal/security review.
 - POLICY=public DRAFT PR; no merge, release or private credentials; `claim_allowed=false`, `PROMOTION=HOLD`; rollback by closing PR and discarding isolated branch.
+
+## S5 — terminal HTTP navigation + emulated ABI (2026-10-28)
+
+- URL parser supports query strings, fragments and explicit ports. HTTP Host reflects non-default ports. Response framing rejects unsupported/multiple Transfer-Encoding and handles Content-Length completion before peer EOF. Same-origin path-absolute redirect is bounded to four hops. 
+- DNS A resolver: connected UDP, getrandom transaction ID, echoed query and bounded answer parser; **plaintext default 8.8.8.8 remains a privacy/reliability gap**. IPv4 parsing rejects ambiguous empty octets and leading zeroes.
+- Added `br_links.h` bounded anchor scanner, terminal link listing, optional `--interactive` navigation with history, no heap. Request stderr dumping removed for privacy. `SO_SNDTIMEO` added to the existing `SO_RCVTIMEO` boundary; real Android connect-timeout behavior unverified.
+- QEMU is test-only: exact-code HEAD `bd6044cd23478aa335f76a341ad3dcee8c4973d2`, run `40657831493` PASS (four jobs, x86-64 + ARMv7/AArch64 QEMU, parser negative fixtures and cross-linked ELF). Historical same-time source identity: **6/11** original imported blobs still equal.
+- Original producer `RafGitTools@05b94848c5d3d359b9e02085fa07ef562f8c380a` unchanged.
+
+## S6 — owner merge and MIME hardening (2026-10-28)
+
+- The owner merged PR#1 at `2026-10-28T08:35:40Z`; public `BrowserRaf/main` moved to merge commit `1e465fe35d234f2f09c98e4b208c21e08bd8b251`. **This merge was not performed by this assistant and must not be confused with a security audit or release.**
+- Subsequent branch-only changes: `br_http.h` `HTTP_CONTENT_TYPE` rejects unsupported binary MIME; `br_html.h` literal `TEXT_RENDER` for text/plain with control-character filtering; `br_main.c` routes MIME before rendering; `tests/loopback_http.py` covers binary rejection and literal markup. Other capability gaps remain.
+- New successor `BrowserRaf` public **DRAFT PR#2** `https://github.com/rafaelmeloreisnovo/BrowserRaf/pull/2` at code/test HEAD `41f23d8a30ba208bb0191a2cc9ed5ee29cba994c`, scoped CI `40658159150`: **4/4 jobs SUCCESS**. Host ELF passed 13 offline HTTP loopback sessions, including MIME cases and correct early Content-Length. QEMU ARMv7 and AArch64 emulated runtime suites passed. Physical Android **NOT_RUN**.
+- Current original-source blob equality **5/11** vs original exact-transfer **11/11 at import**. Unchanged original paths: `internal/Makefile`, `br_entropy.h`, `br_tls.h`, `br_types.h`, `LICENSE`. Intentionally changed on isolated history: `br_dns.h`, `br_html.h`, `br_http.h`, `br_main.c`, `br_start.S`, `br_sys.h`. `br_links.h` is newly authored. This supersedes S4 8/11 and S5 6/11 for the latest branch, preserving both historical receipts by exact ref.
+- `PROMOTION=HOLD` for new PR#2; `claim_allowed=false` for production or complete modern browser. `TOKEN_VAZIO_NOT_RUN`: device, independent security/legal review, authenticated TLS, modern HTML5/JS/DOM/CSS, generalized DNS and arbitrary website compatibility. Rollback new PR#2 by closing/reverting successor; do **not** force-reset owner-merged main.

@@ -302,6 +302,12 @@ static s32 DO_FETCH_R(BCtx*ctx,u32 redirects){
         goto done;
     }
     u32 body_len=total-body_off;
+    s32 mime=HTTP_CONTENT_TYPE(_NB,body_off);
+    if(mime<0){
+        FF_SET(ctx->flags,FL_ERROR);
+        STATUS(ctx->flags,"Content-Type binário ou não suportado");
+        goto done;
+    }
     s32 te_state=HTTP_TRANSFER_ENCODING(_NB,body_off);
     if(te_state<0){
         FF_SET(ctx->flags,FL_ERROR);
@@ -332,9 +338,13 @@ static s32 DO_FETCH_R(BCtx*ctx,u32 redirects){
     STATUS(ctx->flags,"Renderizando HTML...");
     PS("  Body: ");PN(body_len);PS("B\n");
 
-    u32 rlen=0u;
-    if(ctx->status!=0)rlen=HTML_RENDER(_NB+body_off,body_len,_RB,NET_BUF);
-    u32 link_count=BR_LINK_SCAN(_NB+body_off,body_len);
+    u32 rlen=0u,link_count=0u;
+    if(mime==2){
+        rlen=TEXT_RENDER(_NB+body_off,body_len,_RB,NET_BUF);
+    }else{
+        rlen=HTML_RENDER(_NB+body_off,body_len,_RB,NET_BUF);
+        link_count=BR_LINK_SCAN(_NB+body_off,body_len);
+    }
     if(!BR_PHASE_NEXT(&ctx->flags,FL_HTML_RND,FL_DONE,FL_HTML_RND)){
         STATUS(ctx->flags,"Estado invalido: HTML_RND->DONE");
         goto done;
