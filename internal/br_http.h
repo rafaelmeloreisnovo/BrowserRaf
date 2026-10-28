@@ -211,6 +211,31 @@ static s32 HTTP_TRANSFER_ENCODING(const u8*buf,u32 n){
     return-1;
 }
 
+/* Return -1 unsupported/duplicate Content-Type, 0 absent (legacy HTML
+ * subset), 1 text/html, 2 text/plain. Never render binary types in terminal. */
+static s32 HTTP_CONTENT_TYPE(const u8*buf,u32 n){
+    if(!buf)return-1;
+    u32 hend=HTTP_HEADERS_END(buf,n);
+    if(!hend)return-1;
+    const u8*val=HTTP_FIND_HEADER(buf,n,"Content-Type");
+    u32 found=0u;
+    for(u32 pos=0u;pos+13u<hend;pos++){
+        u32 bol=(pos==0u)||(pos>=2u&&buf[pos-2u]=='\r'&&buf[pos-1u]=='\n');
+        if(bol&&BR_MEMCASECMP_ASCII(buf+pos,"Content-Type",12u)==0&&
+           buf[pos+12u]==':'){
+            if(++found>1u)return-1;
+        }
+    }
+    if(!val)return 0;
+    u32 pos=(u32)(val-buf),end=pos;
+    while(end<hend&&buf[end]!='\r'&&buf[end]!=';'&&
+          buf[end]!=' '&&buf[end]!='\t')end++;
+    u32 len=end-pos;
+    if(len==9u&&BR_MEMCASECMP_ASCII(buf+pos,"text/html",9u)==0)return 1;
+    if(len==10u&&BR_MEMCASECMP_ASCII(buf+pos,"text/plain",10u)==0)return 2;
+    return-1;
+}
+
 /* ── DECHUNK IN-PLACE ───────────────────────────────────────────────────── */
 /* Retorna tamanho do body dechunkado, ou 0xFFFFFFFF em erro */
 static u32 HTTP_DECHUNK(u8*buf,u32 n){
