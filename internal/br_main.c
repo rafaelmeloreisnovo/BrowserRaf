@@ -137,9 +137,10 @@ static s32 DO_FETCH_R(BCtx*ctx,u32 redirects){
             PS("  [RETRY CONNECT socket fail]\n");
             continue;
         }
-        if(SET_RECV_TIMEOUT(ctx->fd,(usize)3u)!=0){
+        if(SET_RECV_TIMEOUT(ctx->fd,(usize)3u)!=0||
+           SET_SEND_TIMEOUT(ctx->fd,(usize)3u)!=0){
             FF_SET(ctx->flags,FL_ERROR);
-            STATUS(ctx->flags,"TCP falhou (SO_RCVTIMEO)");
+            STATUS(ctx->flags,"TCP falhou (SO_RCVTIMEO/SO_SNDTIMEO)");
             goto done;
         }
         if(CONNECT(ctx->fd,&sa)==0){
