@@ -75,6 +75,19 @@ static void http(void) {
     CHECK(HTTP_CONTENT_LENGTH((const u8*)duplicate,sizeof(duplicate)-1u,&len)<0);
     CHECK(HTTP_CONTENT_LENGTH((const u8*)incomplete,sizeof(incomplete)-1u,&len)<0);
     CHECK(HTTP_HEADERS_END((const u8*)incomplete,sizeof(incomplete)-1u)==0u);
+
+    const char chunked_ok[]="HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n";
+    const char te_unsupported[]="HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip\r\n\r\n";
+    const char te_duplicate[]="HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\ntransfer-encoding: chunked\r\n\r\n";
+    const char header_fold[]="HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n gzip\r\n\r\n";
+    const char bad_name[]="HTTP/1.1 200 OK\r\nFoo Bar: yes\r\n\r\n";
+    CHECK(HTTP_TRANSFER_ENCODING((const u8*)ok,sizeof(ok)-1u)==0);
+    CHECK(HTTP_TRANSFER_ENCODING((const u8*)chunked_ok,sizeof(chunked_ok)-1u)==1);
+    CHECK(HTTP_TRANSFER_ENCODING((const u8*)te_unsupported,sizeof(te_unsupported)-1u)<0);
+    CHECK(HTTP_TRANSFER_ENCODING((const u8*)te_duplicate,sizeof(te_duplicate)-1u)<0);
+    CHECK(HTTP_TRANSFER_ENCODING((const u8*)header_fold,sizeof(header_fold)-1u)<0);
+    CHECK(HTTP_TRANSFER_ENCODING((const u8*)bad_name,sizeof(bad_name)-1u)<0);
+
     u8 chunks[]="4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n";
     u32 d=HTTP_DECHUNK(chunks,sizeof(chunks)-1u);
     CHECK(d==9u && memcmp(chunks,"Wikipedia",9u)==0);
@@ -127,6 +140,7 @@ static void deterministic_mutations(void) {
         (void)HTTP_HEADERS_END(raw,n);
         u32 content_len=0u;
         (void)HTTP_CONTENT_LENGTH(raw,n,&content_len);
+        (void)HTTP_TRANSFER_ENCODING(raw,n);
         u32 decoded=HTTP_DECHUNK(dechunk,n);
         CHECK(decoded==0xFFFFFFFFu||decoded<=n);
         u32 len=HTML_RENDER(raw,n,rendered,(u32)sizeof(rendered));
