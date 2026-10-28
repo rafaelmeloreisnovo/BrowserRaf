@@ -10,4 +10,10 @@ readelf -h "$tmpdir/browserraf" | grep -q ELF64
 if readelf -l "$tmpdir/browserraf" | grep -q INTERP; then echo "FAIL: INTERP"; exit 1; fi
 if readelf -d "$tmpdir/browserraf" 2>/dev/null | grep -q NEEDED; then echo "FAIL: NEEDED"; exit 1; fi
 grep -Fq 'HTTPS não suportado neste build' internal/br_main.c || { echo "FAIL: HTTPS safety marker"; exit 1; }
-echo 'PASS_SCOPED: host ELF and HTTPS refusal source marker'
+# Exercise the actual host binary with an HTTPS URL. DNS/TCP must never start.
+"$tmpdir/browserraf" https://127.0.0.1/ > "$tmpdir/https.out" 2>&1
+grep -Fq 'HTTPS não suportado neste build' "$tmpdir/https.out" || { echo 'FAIL HTTPS was not refused'; exit 1; }
+if grep -Eq 'Resolvendo DNS|Conectando TCP|Enviando request HTTP' "$tmpdir/https.out"; then
+  echo 'FAIL HTTPS caused a network phase'; exit 1
+fi
+echo 'PASS_SCOPED: host ELF plus actual binary HTTPS pre-network fail-closed'
