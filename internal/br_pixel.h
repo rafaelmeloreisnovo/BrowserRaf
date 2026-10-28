@@ -75,6 +75,11 @@ static s32 BRPX_ROTATE(const u8*src,u32 w,u32 h,u32 channels,u32 turns,
        (channels!=3u&&channels!=4u)||turns>3u)return-1;
     u32 pixels=w*h,bytes=pixels*channels;
     if(pixels>65536u||capacity<bytes)return-1;
+    /* Reject ALL overlapping source/destination spans, not just src==dst.
+     * Integer-address subtraction is bounded by the target flat ABI. */
+    usize sa=(usize)src,da=(usize)dst;
+    if((da>=sa&&da-sa<(usize)bytes)||(sa>da&&sa-da<(usize)bytes))
+        return-1;
     u32 dw=(turns&1u)?h:w;
     for(u32 y=0u;y<h;y++)for(u32 x=0u;x<w;x++){
         u32 ox=x,oy=y;
