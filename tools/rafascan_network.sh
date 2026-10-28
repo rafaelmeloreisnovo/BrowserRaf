@@ -33,7 +33,7 @@ case "$pdns" in
     hostname)
         host=$(read_settings private_dns_specifier)
         [ -n "$host" ] && [ "$host" != null ] || host='TOKEN_VAZIO_UNOBSERVED'
-        print_flag 'DNS_PRIVADO' "CONFIGURADO (modo estrito; servidor=$host; nao validado" ;;
+        print_flag 'DNS_PRIVADO' "CONFIGURADO (modo estrito; servidor=$host; nao validado)" ;;
     opportunistic) print_flag 'DNS_PRIVADO' 'ATENCAO (automatico pode permitir DNS sem criptografia)' ;;
     off) print_flag 'DNS_PRIVADO' 'ATENCAO (desativado)' ;;
     *) print_flag 'DNS_PRIVADO' 'TOKEN_VAZIO_UNOBSERVED (sem permissao ou API indisponivel)' ;;
@@ -126,19 +126,21 @@ probe() {
     fi
 }
 
+sys_verified=0
 if sys_result=$(probe system); then
     case " $sys_result " in
-        *' tls=0 '*) print_flag 'HTTPS_DNS_SISTEMA' "TLS_VALIDADO $sys_result" ;;
+        *' tls=0 '*) sys_verified=1; print_flag 'HTTPS_DNS_SISTEMA' "TLS_VALIDADO $sys_result" ;;
         *) print_flag 'HTTPS_DNS_SISTEMA' "INCONCLUSIVO (status TLS anormal): $sys_result" ;;
     esac
 else
     print_flag 'HTTPS_DNS_SISTEMA' 'FALHA (causa pode ser rede, certificado, relogio ou filtragem; nao prova ataque)'
 fi
 
+doh_verified=0
 if curl --help all 2>/dev/null | grep -q -- '--doh-url'; then
     if doh_result=$(probe doh); then
         case " $doh_result " in
-            *' tls=0 '*) print_flag 'HTTPS_DNS_DOH' "TLS_VALIDADO $doh_result" ;;
+            *' tls=0 '*) doh_verified=1; print_flag 'HTTPS_DNS_DOH' "TLS_VALIDADO $doh_result" ;;
             *) print_flag 'HTTPS_DNS_DOH' "INCONCLUSIVO (status TLS anormal): $doh_result" ;;
         esac
     else
@@ -167,7 +169,7 @@ else
     print_flag 'PING_ICMP' 'TOKEN_VAZIO_NOT_RUN (ping indisponivel)'
 fi
 
-if [ -n "${sys_result:-}" ] && [ -n "${doh_result:-}" ]; then
+if [ "$sys_verified" -eq 1 ] && [ "$doh_verified" -eq 1 ]; then
     sip=$(printf '%s\n' "$sys_result" | sed -n 's/.* ip=\([^ ]*\) tls=.*/\1/p')
     dip=$(printf '%s\n' "$doh_result" | sed -n 's/.* ip=\([^ ]*\) tls=.*/\1/p')
     if [ -n "$sip" ] && [ -n "$dip" ]; then
