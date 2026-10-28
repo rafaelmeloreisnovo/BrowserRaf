@@ -121,14 +121,22 @@ AI s32 SET_RECV_TIMEOUT(s32 fd,usize sec){
 }
 /* IP parse "a.b.c.d" → u8[4] */
 AI s32 PARSE_IP(const char*s,u8*ip){
-    u32 i=0,oc=0,acc=0;
-    while(s[i]){
-        if(s[i]>='0'&&s[i]<='9'){acc=acc*10u+(u32)(s[i]-'0');if(acc>255u)return-1;}
-        else if(s[i]=='.'){if(oc>=3u)return-1;ip[oc++]=(u8)acc;acc=0;}
-        else return-1;
-        i++;
+    if(!s||!ip)return-1;
+    u32 index=0u,octet=0u,digits=0u,part=0u;
+    while(s[index]&&index<16u){
+        u8 c=(u8)s[index++];
+        if(c>='0'&&c<='9'){
+            if(digits>=3u||(digits!=0u&&part==0u))return-1;
+            part=part*10u+(u32)(c-'0');
+            if(part>255u)return-1;
+            digits++;
+        }else if(c=='.'){
+            if(!digits||octet>=3u)return-1;
+            ip[octet++]=(u8)part;
+            part=0u;digits=0u;
+        }else return-1;
     }
-    if(oc!=3u)return-1;
-    ip[oc]=(u8)acc;
+    if(index==16u||octet!=3u||digits==0u)return-1;
+    ip[3]=(u8)part;
     return 0;
 }
