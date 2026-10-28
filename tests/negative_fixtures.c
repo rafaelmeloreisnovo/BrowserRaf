@@ -130,6 +130,26 @@ static void dns_packets(void){
     CHECK(PARSE_IP("256.2.3.4",ip)!=0);
 }
 
+
+static void route_security(void){
+    const u8 public_ip[4]={93u,184u,216u,34u};
+    const u8 private_ip[4]={192u,168u,0u,1u};
+    const u8 loopback[4]={127u,0u,0u,1u};
+    const u8 cgn[4]={100u,64u,0u,1u};
+    const u8 documentation[4]={203u,0u,113u,9u};
+    const u8 multicast[4]={224u,1u,1u,1u};
+    CHECK(BR_IPV4_GLOBAL_CANDIDATE(public_ip)==1u);
+    CHECK(BR_IPV4_GLOBAL_CANDIDATE(private_ip)==0u);
+    CHECK(BR_IPV4_GLOBAL_CANDIDATE(loopback)==0u);
+    CHECK(BR_IPV4_GLOBAL_CANDIDATE(cgn)==0u);
+    CHECK(BR_IPV4_GLOBAL_CANDIDATE(documentation)==0u);
+    CHECK(BR_IPV4_GLOBAL_CANDIDATE(multicast)==0u);
+    CHECK(BR_OVERRIDE_IP_ALLOWED("example.org",public_ip)==1u);
+    CHECK(BR_OVERRIDE_IP_ALLOWED("example.org",loopback)==0u);
+    CHECK(BR_OVERRIDE_IP_ALLOWED("localhost",loopback)==1u);
+    CHECK(BR_OVERRIDE_IP_ALLOWED("localhost.evil",loopback)==0u);
+}
+
 static void links(void){
     const char page[]="<a href='/next?q=1&amp;v=2'>GO</a>"
         "<!-- <a href='/comment'>hidden</a> -->"
@@ -221,7 +241,7 @@ static void deterministic_mutations(void) {
 }
 
 int main(void) {
-    urls();http();dns_packets();html();links();deterministic_mutations();
+    urls();http();dns_packets();route_security();html();links();deterministic_mutations();
     fprintf(stderr,"BrowserRaf negative fixtures: %u checks, %u failed\n",checks,failures);
     return failures?1:0;
 }

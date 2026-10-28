@@ -75,6 +75,33 @@ static s32 URL_PARSE(const char*url,BCtx*ctx){
 #define SOCK_DGRAM 2
 #define AF_INET 2
 
+
+/* This is a conservative *routing* filter, not DNSSEC, TLS, a certificate
+ * validator, or a guarantee that an address belongs to the intended host.
+ * Known non-global IPv4 blocks must never be accepted from public DNS. */
+static u8 BR_IPV4_GLOBAL_CANDIDATE(const u8 ip[4]){
+    if(!ip)return 0u;
+    u8 a=ip[0],b=ip[1],c=ip[2];
+    if(a==0u||a==10u||a==127u||a>=224u)return 0u;
+    if(a==100u&&b>=64u&&b<=127u)return 0u; /* shared CGN */
+    if(a==169u&&b==254u)return 0u; /* link local */
+    if(a==172u&&b>=16u&&b<=31u)return 0u;
+    if(a==192u&&(b==168u||b==0u||(b==88u&&c==99u)))return 0u;
+    if(a==192u&&b==0u&&c==2u)return 0u;
+    if(a==198u&&(b==18u||b==19u||(b==51u&&c==100u)))return 0u;
+    if(a==203u&&b==0u&&c==113u)return 0u;
+    return 1u;
+}
+/* Explicit local testing remains possible ONLY for the exact localhost
+ * hostname. Other hostnames cannot be rebound to loopback/private targets
+ * via --connect-ip. Numeric URL hosts already bypass DNS without this flag. */
+static u8 BR_OVERRIDE_IP_ALLOWED(const char*host,const u8 ip[4]){
+    if(!host||!ip)return 0u;
+    if(BR_IPV4_GLOBAL_CANDIDATE(ip))return 1u;
+    return (u8)(BR_MEMCMP(host,"localhost",10u)==0&&host[9]==0&&
+                ip[0]==127u&&ip[1]==0u&&ip[2]==0u&&ip[3]==1u);
+}
+
 static s32 DNS_PARSE_A_REPLY(const u8*rsp,u32 n,const u8*query,u32 qlen,u8 ip[4]){
     if(!rsp||!query||!ip||qlen<17u||qlen>512u||n<qlen+12u)return-1;
     if(rsp[0]!=query[0]||rsp[1]!=query[1])return-1;
