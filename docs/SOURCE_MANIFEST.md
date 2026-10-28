@@ -33,3 +33,11 @@ The original import at commit `381dc68e4eeab257c6fa6e810775aaa183ea5832` passed 
 2. The AArch64 instruction `and sp,sp,#-16` is invalid; Linux ELF process entry already provides 16-byte SP alignment. The invalid operation was removed, with that ABI precondition documented. Scoped fix commit `9d5675cfe1fa7c2dd17ef0e1a31c41453acdd26e`.
 
 Current `internal/br_start.S` has **deviated intentionally** from source blob `a390af27d0f99f1daa894e0cec88854ddf6707fb` to destination blob `dee15ce56700b4dca8a4398ac7198ae96e848d4a`. All other ten imported objects (9 files plus LICENSE) still match their original source Git blob SHAs. No change was made to the RafGitTools source. This note is an append-only successor to the initial transfer receipt; compile-only ABI CI and real-device runtime validation must remain independently bound to an exact branch HEAD.
+
+## S3 — parser security successor (2026-10-28)
+
+- Pinned producer source remains `rafaelmeloreisnovo/RafGitTools@05b94848c5d3d359b9e02085fa07ef562f8c380a`, unchanged.
+- New destination-only `internal/br_http.h` fix: invalid HTTP protocol/version or status rejected; duplicate `Content-Length` fails closed. Exact changed blob `054360f7c25a965de6f3be23ca9dba56fdf786bc` supersedes imported blob `93df335600260d6140931299a0290bdc002646a2`; final fix commit `2aa7981856c273c3a39d8742799809f2ae4a1564`.
+- `tests/negative_fixtures.c` + `tests/check_negative_fixtures.sh` were newly authored, offline host-only, ASan/UBSan. First targeted run `40651282568` **FAILED as expected** (2 parser defects, 40 checks); corrected exact-head run `40651399476` **SUCCESS** (three jobs: x86-64 host ELF, ARM32/ARM64 object compile, negative fixtures).
+- **Current import fidelity = 9/11 original objects byte-identical**, with two documented destination-only fixes (`br_start.S` and `br_http.h`). This supersedes the earlier 10/11 statement for the latest branch without erasing original 11/11 import evidence.
+- ABI cross-link, ARM/Android device, full DNS/HTTP robustness, browser rendering security, TLS/PKIX, and independent review remain `TOKEN_VAZIO_NOT_RUN`. `PROMOTION=HOLD; claim_allowed=false`.
