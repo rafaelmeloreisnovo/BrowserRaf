@@ -27,9 +27,7 @@ for triple in armv7a-linux-androideabi21 aarch64-linux-android28; do
   readelf -h "$d/$triple-browser" | grep -q "Machine:.*$arch" || { echo "FAIL machine $triple"; exit 1; }
   if readelf -l "$d/$triple-browser" | grep -q INTERP; then echo "FAIL INTERP $triple"; exit 1; fi
   if readelf -d "$d/$triple-browser" 2>/dev/null | grep -q NEEDED; then echo "FAIL NEEDED $triple"; exit 1; fi
-  if readelf -Ws "$d/$triple-browser" | grep -E 'UND[[:space:]]+[^[:space:]]' | grep -v 'UND[[:space:]]*
-done
-; then
+  if readelf -Ws "$d/$triple-browser" | grep -E 'UND[[:space:]]+[[:alnum:]_]'; then
     echo "FAIL unresolved symbols $triple"; exit 1
   fi
   echo "PASS_LINK_ONLY $triple: no libc/CRT INTERP NEEDED or unresolved symbols"
