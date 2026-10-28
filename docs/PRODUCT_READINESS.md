@@ -38,10 +38,10 @@ The repository has no connection to a physical Android device in this session; *
 
 ## Invariants
 
-- Source pinned `rafaelmeloreisnovo/RafGitTools@05b94848c5d3d359b9e02085fa07ef562f8c380a`, and public `BrowserRaf/main` unchanged by the isolated DRAFT.
-- Exact initial import was **11/11 identical Git blobs**. After current branch fixes, original imported files retaining identical hashes are **6/11**: `Makefile`, `br_entropy.h`, `br_html.h`, `br_tls.h`, `br_types.h` and `LICENSE`. Modified source files: `br_dns.h`, `br_http.h`, `br_main.c`, `br_start.S`, `br_sys.h`; `br_links.h` is newly authored. Earlier S2/S3/S4 receipts remain historically true for their pinned commits.
+- Source pinned `rafaelmeloreisnovo/RafGitTools@05b94848c5d3d359b9e02085fa07ef562f8c380a`, original producer unchanged. **Concurrent owner action:** PR#1 was merged to BrowserRaf/main at 2026-10-28T08:35:40Z; main merge commit `1e465fe35d234f2f09c98e4b208c21e08bd8b251`. The successor PR#2 is **DRAFT OPEN** for MIME safety changes and has not been merged by this workflow.
+- Exact initial import was **11/11 identical Git blobs**. Current successor branch retains **5/11** identical original blobs: `Makefile`, `br_entropy.h`, `br_tls.h`, `br_types.h`, and `LICENSE`. Destination-only modified original files: `br_dns.h`, `br_html.h`, `br_http.h`, `br_main.c`, `br_start.S`, `br_sys.h`. `br_links.h` is newly authored. Earlier 8/11 and 6/11 observations describe earlier exact commits, not the current branch.
 - No secrets, private code, automatic merge or release; `PROMOTION=HOLD`; `claim_allowed=false` for complete/secure production browser.
-- Rollback: close unmerged PR/discard candidate branch; no changes to producer and destination main.
+- Rollback: close unmerged successor PR#2 or revert only its commits after review; **PR#1 is already merged to main by the owner**, so rollback cannot be described as merely discarding PR#1. Never force-reset main.
 - Strict failure semantics: `TOKEN_VAZIO` is not zero and `IMPLEMENTED_UNTESTED` is not `PASS`.
 
 ## R3
@@ -51,3 +51,9 @@ The repository has no connection to a physical Android device in this session; *
 `F_gap`: physically observed Android, HTTPS trust, modern browser capabilities, bounded streaming and independent review.
 
 `F_next`: secure TLS architecture decision (platform-provided TLS adapter versus independently audited implementation), Android device test, proper DNS privacy policy, wider interop and controlled release gate.
+
+## S6 successor — MIME security + owner merge event
+
+- Security: `Content-Type` values outside the supported text/html and text/plain family fail closed. Literal text/plain display suppresses untrusted terminal C0/ESC/DEL controls; raw binary is not sent to the terminal.
+- New head `41f23d8a30ba208bb0191a2cc9ed5ee29cba994c` submitted to `PR#2` for an independent exact-head test (run `40658159150`); a queued/running CI must not be labeled PASS until completion.
+- User/provider merge of PR#1 occurred concurrently with this session. A merge is **not proof of production safety**. Both source and code/test gates remain separately auditable.
