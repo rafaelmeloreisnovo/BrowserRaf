@@ -124,7 +124,7 @@ def interactive_navigation():
                         html=b"<html><a href='/second?x=1&amp;y=2'>follow</a></html>"
                         conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: "+str(len(html)).encode()+b"\r\n\r\n"+html)
                     else:
-                        conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\nNEXT-PAGE")
+                        conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nNEXT-PAGE")
         except Exception as exc:
             problems.append(str(exc))
         finally:
